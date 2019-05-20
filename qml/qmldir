@@ -3,4 +3,4 @@ typeinfo devices.qmltypes
 plugin WPN114-devices
 classname qml_plugin
 
-PushDevice 1.0 PushDevice.qml
+AbletonPush 1.0 PushDevice.qml
