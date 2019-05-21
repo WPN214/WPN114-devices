@@ -1,6 +1,6 @@
 import QtQuick 2.0
 import WPN114.Midi 1.0 as WPN114
-import WPNPush 1.0 as Push
+import WPN114.Devices 1.0 as Push
 
 Item
 {
