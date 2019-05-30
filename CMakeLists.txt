@@ -10,12 +10,19 @@ find_package(Qt5 REQUIRED COMPONENTS Quick Core Qml)
 
 set(WPN114DEVICES_QML_SOURCES
     qml_plugin.cpp
-    source/device_enums.hpp
+    source/devices.hpp
+    source/devices.cpp
+    qml/PushDevice.qml
     )
 
-add_library(${PROJECT_NAME} SHARED ${WPN114DEVICES_QML_SOURCES})
-target_link_libraries(${PROJECT_NAME} Qt5::Core Qt5::Quick Qt5::Qml)
+if (UNIX AND NOT APPLE)
+    set(QT5_WPN114QML_PATH /usr/lib/qt/qml/WPN114)
+endif()
 
-install(TARGETS ${PROJECT_NAME} DESTINATION /usr/lib/qt/qml/WPN114/Devices)
+add_library(${PROJECT_NAME} SHARED ${WPN114DEVICES_QML_SOURCES})
+target_link_libraries(${PROJECT_NAME} Qt5::Core Qt5::Quick Qt5::Qml -L${QT5_WPN114QML_PATH}/Midi/libwpn114-qml.so)
+target_include_directories(${PROJECT_NAME} PUBLIC ${QT5_WPN114QML_PATH}/Midi/include)
+
+install(TARGETS ${PROJECT_NAME} DESTINATION ${QT5_WPN114QML_PATH}/Devices)
 install(FILES qml/devices.qmltypes qml/qmldir qml/PushDevice.qml
-        DESTINATION /usr/lib/qt/qml/WPN114/Devices)
+        DESTINATION ${QT5_WPN114QML_PATH}/Devices)
