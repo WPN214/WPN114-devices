@@ -286,66 +286,52 @@ class ChromaticModel : public QObject, public QQmlParserStatus
     Q_OBJECT
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (PadColor
-    dark MEMBER m_dark)
+    Q_PROPERTY (int dark MEMBER m_dark)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (PadColor
-    medium MEMBER m_medium)
+    Q_PROPERTY (int medium MEMBER m_medium)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (PadColor
-    bright MEMBER m_bright)
+    Q_PROPERTY (int bright MEMBER m_bright)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (PadColor
-    pressed MEMBER m_pressed)
+    Q_PROPERTY (int pressed MEMBER m_pressed)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (int
-    octave MEMBER m_octave WRITE set_octave)
+    Q_PROPERTY (int octave MEMBER m_octave WRITE set_octave)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (bool
-    hold MEMBER m_hold)
+    Q_PROPERTY (bool hold MEMBER m_hold)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (bool
-    visible MEMBER m_visible WRITE set_visible)
+    Q_PROPERTY (bool visible MEMBER m_visible WRITE set_visible)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (MidiDevice*
-    device MEMBER m_device)
+    Q_PROPERTY (MIDIDevice* device MEMBER m_device)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (MidiDevice*
-    output MEMBER m_output)
+    Q_PROPERTY (MIDIDevice* output MEMBER m_output)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (int
-    x MEMBER m_x WRITE set_x)
+    Q_PROPERTY (int x MEMBER m_x WRITE set_x)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (int
-    y MEMBER m_y WRITE set_y)
+    Q_PROPERTY (int y MEMBER m_y WRITE set_y)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (int
-    width MEMBER m_w WRITE set_x)
+    Q_PROPERTY (int width MEMBER m_w WRITE set_x)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (int
-    height MEMBER m_h WRITE set_h)
+    Q_PROPERTY (int height MEMBER m_h WRITE set_h)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_INTERFACES
-    (QQmlParserStatus)
+    Q_INTERFACES (QQmlParserStatus)
 
     //-------------------------------------------------------------------------------------------------------
     uint8_t m_dark = 0, m_medium = 0, m_bright = 0, m_pressed = 0;
     uint8_t m_x = 0, m_y = 0, m_w = 8, m_h = 8;
 
-    MIDIHandler* m_device = nullptr, *m_output = nullptr;
+    MIDIDevice* m_device = nullptr, *m_output = nullptr;
     uint8_t m_octave = 4;
     bool m_hold = false;
     bool m_visible = false;
@@ -382,6 +368,7 @@ public:
 
     //-------------------------------------------------------------------------------------------------------
     ChromaticModel()
+    //-------------------------------------------------------------------------------------------------------
     {
         held_notes.reserve(32);
         active_notes.reserve(32);
@@ -397,6 +384,7 @@ public:
     //-------------------------------------------------------------------------------------------------------
     virtual void
     componentComplete() override
+    //-------------------------------------------------------------------------------------------------------
     {
         // TODO: shift given base note
         color_layout[0] = m_bright;
@@ -434,9 +422,11 @@ public:
     //-------------------------------------------------------------------------------------------------------
     void
     set_visible(bool visible)
+    //-------------------------------------------------------------------------------------------------------
     {
         if (!m_visible && visible)
             display();
+
         else if (m_visible && !visible)
             hide();
 
@@ -444,26 +434,31 @@ public:
     }
 
     //-------------------------------------------------------------------------------------------------------
-    void
+    Q_INVOKABLE void
     display()
+    //-------------------------------------------------------------------------------------------------------
+    // light on device'selected grid pads
     {
-        if (grid.empty())
-            return;
-        // send noteOn messages to device
+        for (auto& n : grid)
+            light_pad(n[PADNO], n[COLORNO], 0);
     }
 
     //-------------------------------------------------------------------------------------------------------
-    void
+    Q_INVOKABLE void
     hide()
-    {
-        if (grid.empty())
-            return;
-        // send noteOn messages to device
+    //-------------------------------------------------------------------------------------------------------
+    // light off device'selected grid pads
+    {        
+        for (auto& n : grid)
+            light_pad(n[PADNO], 0, 0);
     }
 
     //-------------------------------------------------------------------------------------------------------
     void
     update_grid()
+    // this should be called whenever a change in the grid's dimensions occurs
+    // or in the grid's xy offset
+    //-------------------------------------------------------------------------------------------------------
     {
         grid.clear();
         int8_t cphs = 0, nphs = 0;
@@ -516,6 +511,7 @@ public:
     //-------------------------------------------------------------------------------------------------------
     padvector_t
     lookup_pads(uint8_t note)
+    //-------------------------------------------------------------------------------------------------------
     {
         padvector_t res = {};
         uint8_t i = 0;
@@ -533,6 +529,7 @@ public:
     void
     light_pad(uint8_t index, uint8_t color, uint8_t mode)
     // pad light feedback
+    //-------------------------------------------------------------------------------------------------------
     {
         m_device->noteOn(mode, index, color);
     }
@@ -540,11 +537,16 @@ public:
     //-------------------------------------------------------------------------------------------------------
 
 signals:
+
     void noteOn(uint8_t index, uint8_t velocity);
     void noteOff(uint8_t index, uint8_t velocity);
 
+public:
+
+    //-------------------------------------------------------------------------------------------------------
     void
     output_note_on(uint8_t index, uint8_t velocity)
+    //-------------------------------------------------------------------------------------------------------
     {
         if (m_output)
             m_output->noteOn(0, index, velocity);
@@ -552,8 +554,10 @@ signals:
         emit noteOn(index, velocity);
     }
 
+    //-------------------------------------------------------------------------------------------------------
     void
     output_note_off(uint8_t index, uint8_t velocity)
+    //-------------------------------------------------------------------------------------------------------
     {
         if (m_output)
             m_output->noteOff(0, index, velocity);
@@ -564,6 +568,7 @@ signals:
     //-------------------------------------------------------------------------------------------------------
     void
     update_note(uint8_t note, uint8_t oct, bool incdec, uint8_t mode)
+    //-------------------------------------------------------------------------------------------------------
     {
         uint8_t n0 = note-oct*12;
 
@@ -591,7 +596,16 @@ signals:
 
     //-------------------------------------------------------------------------------------------------------
     void
+    set_octave(uint8_t octave)
+    //-------------------------------------------------------------------------------------------------------
+    {
+
+    }
+
+    //-------------------------------------------------------------------------------------------------------
+    void
     update_octave(bool change)
+    //-------------------------------------------------------------------------------------------------------
     {
 
     }
@@ -599,6 +613,7 @@ signals:
     //-------------------------------------------------------------------------------------------------------
     Q_INVOKABLE void
     note_on(uint8_t n0, uint8_t velocity)
+    //-------------------------------------------------------------------------------------------------------
     {
         uint8_t note = lookup_note(n0);
         auto pads = lookup_pads(note);
@@ -622,6 +637,7 @@ signals:
     //-------------------------------------------------------------------------------------------------------
     Q_INVOKABLE void
     note_off(uint8_t n0, uint8_t velocity)
+    //-------------------------------------------------------------------------------------------------------
     {
         auto note   = lookup_note(n0);
         auto color  = lookup_color(n0);
