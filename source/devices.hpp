@@ -414,6 +414,12 @@ public:
             display();
     }
 
+    virtual ~ChromaticModel() override
+    {
+        if (m_visible)
+            hide();
+    }
+
     //-------------------------------------------------------------------------------------------------------
     void
     set_x(uint8_t x)
@@ -536,10 +542,6 @@ public:
 
                 cphs++; nphs++;
                 grid.push_back({padno, noteno, colorno});
-
-                qDebug() << "Pad number:" << padno
-                         << "Note number:" << noteno
-                         << "Color:" << colorno;
             }
 
             // wrapped/mirror padding
@@ -584,7 +586,6 @@ public:
     {        
         padvector_t res = { -1, -1 };
         // see next function
-
         uint8_t i = 0;                
 
         for (auto& n : grid) {
@@ -605,12 +606,10 @@ public:
     // this will prevent dynamic allocation
     //-------------------------------------------------------------------------------------------------------
     {
-        uint8_t n = 0;
-
-        while (v[n] >= 0) {
-            padOn(v[n], color, mode);
-            n++;
-        }
+        for (uint8_t n = 0; n < 2; ++n)
+            if (v[n] >= 0)
+                padOn(v[n], color, mode);
+            else return;
     }
 
     //-------------------------------------------------------------------------------------------------------
