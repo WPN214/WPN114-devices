@@ -5,6 +5,7 @@ import WPN114.Devices 1.0 as Push
 Item
 {
     id: root
+    property alias midi_device: midi_hdl
 
     signal play         ( );
     signal record       ( );

@@ -3,7 +3,6 @@
 
 #include <QObject>
 #include <QQmlParserStatus>
-#include <midi.hpp>
 
 namespace Ableton
 {
@@ -307,12 +306,6 @@ class ChromaticModel : public QObject, public QQmlParserStatus
     Q_PROPERTY (bool visible MEMBER m_visible WRITE set_visible)
 
     //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (MIDIDevice* device MEMBER m_device)
-
-    //-------------------------------------------------------------------------------------------------------
-    Q_PROPERTY (MIDIDevice* output MEMBER m_output)
-
-    //-------------------------------------------------------------------------------------------------------
     Q_PROPERTY (int x MEMBER m_x WRITE set_x)
 
     //-------------------------------------------------------------------------------------------------------
@@ -331,10 +324,10 @@ class ChromaticModel : public QObject, public QQmlParserStatus
     uint8_t m_dark = 0, m_medium = 0, m_bright = 0, m_pressed = 0;
     uint8_t m_x = 0, m_y = 0, m_w = 8, m_h = 8;
 
-    MIDIDevice* m_device = nullptr, *m_output = nullptr;
     uint8_t m_octave = 4;
     bool m_hold = false;
     bool m_visible = false;
+    bool m_complete = false;
 
     //-------------------------------------------------------------------------------------------------------
     using padnote_t    = std::array<uint8_t, 3>;
@@ -358,6 +351,11 @@ class ChromaticModel : public QObject, public QQmlParserStatus
     {
         uint8_t index;
         uint8_t octave;
+
+        bool operator==(ghost_note const& other)
+        {
+            return index == other.index && octave == other.octave;
+        }
     };
 
     //-------------------------------------------------------------------------------------------------------
@@ -409,6 +407,10 @@ public:
         color_layout[11] = m_medium;
 
         update_grid();
+        m_complete = true;
+
+        if (m_visible)
+            display();
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -432,6 +434,11 @@ public:
     set_visible(bool visible)
     //-------------------------------------------------------------------------------------------------------
     {
+        if (!m_complete) {
+            m_visible = visible;
+            return;
+        }
+
         if (!m_visible && visible)
             display();
 
@@ -448,7 +455,7 @@ public:
     // light on device'selected grid pads
     {
         for (auto& n : grid)
-             light_pad(n[PADNO], n[COLORNO], 0);
+             padOn(n[PADNO], n[COLORNO], 0);
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -458,7 +465,7 @@ public:
     // light off device'selected grid pads
     {        
         for (auto& n : grid)
-             light_pad(n[PADNO], 0, 0);
+             padOn(n[PADNO], 0, 0);
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -532,58 +539,18 @@ public:
     }
 
     //-------------------------------------------------------------------------------------------------------
-    void
-    light_pad(uint8_t index, uint8_t color, uint8_t mode)
-    // pad light feedback
-    //-------------------------------------------------------------------------------------------------------
-    {
-        m_device->noteOn(mode, index, color);
-    }
-
-    //-------------------------------------------------------------------------------------------------------
 
     Q_SIGNAL void
-    noteOn(uint8_t index, uint8_t velocity);
+    noteOn(unsigned int index, unsigned int velocity);
 
     Q_SIGNAL void
-    noteOff(uint8_t index, uint8_t velocity);
+    noteOff(unsigned int index, unsigned int velocity);
 
     Q_SIGNAL void
-    aftertouch(uint8_t index, uint8_t value);
+    aftertouch(unsigned int index, unsigned int value);
 
-
-    //-------------------------------------------------------------------------------------------------------
-    void
-    output_note_on(uint8_t index, uint8_t velocity)
-    //-------------------------------------------------------------------------------------------------------
-    {
-        if (m_output)
-            m_output->noteOn(0, index, velocity);
-
-        emit noteOn(index, velocity);
-    }
-
-    //-------------------------------------------------------------------------------------------------------
-    void
-    output_note_off(uint8_t index, uint8_t velocity)
-    //-------------------------------------------------------------------------------------------------------
-    {
-        if (m_output)
-            m_output->noteOff(0, index, velocity);
-
-        emit noteOff(index, velocity);
-    }
-
-    //-------------------------------------------------------------------------------------------------------
-    void
-    output_aftertouch(uint8_t index, uint8_t value)
-    //-------------------------------------------------------------------------------------------------------
-    {
-        if (m_output)
-            m_output->aftertouch(0, index, value);
-
-        emit aftertouch(index, value);
-    }
+    Q_SIGNAL void
+    padOn(unsigned int index, unsigned int color, unsigned int mode);
 
     //-------------------------------------------------------------------------------------------------------
     void
@@ -597,7 +564,7 @@ public:
             auto color = lookup_color(pads[0]);
 
             for (const auto& pad : pads)
-                light_pad(pad, color, 0);
+                padOn(pad, color, 0);
         }
 
         // turn on new pads
@@ -609,7 +576,7 @@ public:
         auto color = lookup_pads(pads[0]);
 
         for (const auto& pad : pads)
-             light_pad(pad, m_pressed, mode);
+             padOn(pad, m_pressed, mode);
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -649,7 +616,7 @@ public:
 
     //-------------------------------------------------------------------------------------------------------
     Q_INVOKABLE void
-    note_on(uint8_t n0, uint8_t velocity)
+    note_on(unsigned int n0, unsigned int velocity)
     //-------------------------------------------------------------------------------------------------------
     {
         uint8_t note = lookup_note(n0);
@@ -663,17 +630,17 @@ public:
                 return;
 
         // output note
-        output_note_on(note, velocity);
+        noteOn(note, velocity);
         active_notes.push_back(note);
 
         // device feedback
         for (auto& pad : pads)
-             light_pad(pad, m_pressed, 0);
+             padOn(pad, m_pressed, 0);
     }
 
     //-------------------------------------------------------------------------------------------------------
     Q_INVOKABLE void
-    note_off(uint8_t n0, uint8_t velocity)
+    note_off(unsigned int n0, unsigned int velocity)
     //-------------------------------------------------------------------------------------------------------
     {
         auto note   = lookup_note(n0);
@@ -692,7 +659,7 @@ public:
             auto plm = static_cast<uint8_t>(PadLightingMode::Pulse2);
 
             for (auto& pad : pads)
-                light_pad(pad, color, plm);
+                padOn(pad, color, plm);
             return;
         }
 
@@ -719,10 +686,10 @@ public:
             if (rem) std::remove(ghost_notes.begin(), ghost_notes.end(), *rem);
         }
 
-        m_output->noteOff(0, note, velocity);
+        noteOff(note, velocity);
 
         for (auto& pad : pads)
-            light_pad(pad, color, 0);
+            padOn(pad, color, 0);
     }
 };
 

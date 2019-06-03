@@ -19,9 +19,9 @@ if (UNIX AND NOT APPLE)
     set(QT5_WPN114QML_PATH /usr/lib/qt/qml/WPN114)
 endif()
 
+
 add_library(${PROJECT_NAME} SHARED ${WPN114DEVICES_QML_SOURCES})
-target_link_libraries(${PROJECT_NAME} Qt5::Core Qt5::Quick Qt5::Qml -L${QT5_WPN114QML_PATH}/Midi/libwpn114midi-qml.so)
-target_include_directories(${PROJECT_NAME} PUBLIC ${QT5_WPN114QML_PATH}/Midi/include)
+target_link_libraries(${PROJECT_NAME} Qt5::Core Qt5::Quick Qt5::Qml)
 
 install(TARGETS ${PROJECT_NAME} DESTINATION ${QT5_WPN114QML_PATH}/Devices)
 install(FILES qml/devices.qmltypes qml/qmldir qml/PushDevice.qml
