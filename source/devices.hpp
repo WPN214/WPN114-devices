@@ -353,11 +353,19 @@ class ChromaticModel : public QObject, public QQmlParserStatus
     held_notes;
 
     //-------------------------------------------------------------------------------------------------------
+    struct ghost_note
+    //-------------------------------------------------------------------------------------------------------
+    {
+        uint8_t index;
+        uint8_t octave;
+    };
+
+    //-------------------------------------------------------------------------------------------------------
     std::vector<uint8_t>
     active_notes;
 
     //-------------------------------------------------------------------------------------------------------
-    std::vector<uint8_t>
+    std::vector<ghost_note>
     ghost_notes;
 
     //-------------------------------------------------------------------------------------------------------
@@ -440,7 +448,7 @@ public:
     // light on device'selected grid pads
     {
         for (auto& n : grid)
-            light_pad(n[PADNO], n[COLORNO], 0);
+             light_pad(n[PADNO], n[COLORNO], 0);
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -450,7 +458,7 @@ public:
     // light off device'selected grid pads
     {        
         for (auto& n : grid)
-            light_pad(n[PADNO], 0, 0);
+             light_pad(n[PADNO], 0, 0);
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -474,8 +482,7 @@ public:
 
         // -----------------------------------------------> x
 
-        for (uint8_t y = 0; y < m_h; ++y)
-        {
+            for (uint8_t y = 0; y < m_h; ++y) {
             for (uint8_t x = 0; x < m_w; ++x)
             {
                 if (cphs == 12)
@@ -492,8 +499,7 @@ public:
             }
 
             // wrapped/mirror padding
-            if (m_w > 5)
-            {
+            if (m_w > 5) {
                 cphs -= (m_w-5);
                 nphs -= (m_w-5);
             }
@@ -536,12 +542,15 @@ public:
 
     //-------------------------------------------------------------------------------------------------------
 
-signals:
+    Q_SIGNAL void
+    noteOn(uint8_t index, uint8_t velocity);
 
-    void noteOn(uint8_t index, uint8_t velocity);
-    void noteOff(uint8_t index, uint8_t velocity);
+    Q_SIGNAL void
+    noteOff(uint8_t index, uint8_t velocity);
 
-public:
+    Q_SIGNAL void
+    aftertouch(uint8_t index, uint8_t value);
+
 
     //-------------------------------------------------------------------------------------------------------
     void
@@ -567,14 +576,23 @@ public:
 
     //-------------------------------------------------------------------------------------------------------
     void
+    output_aftertouch(uint8_t index, uint8_t value)
+    //-------------------------------------------------------------------------------------------------------
+    {
+        if (m_output)
+            m_output->aftertouch(0, index, value);
+
+        emit aftertouch(index, value);
+    }
+
+    //-------------------------------------------------------------------------------------------------------
+    void
     update_note(uint8_t note, uint8_t oct, bool incdec, uint8_t mode)
     //-------------------------------------------------------------------------------------------------------
     {
         uint8_t n0 = note-oct*12;
 
-        if (n0 && n0 < 63)
-        // turn off pads
-        {
+        if (n0 && n0 < 63) { // turn off pads
             auto pads  = lookup_pads(n0);
             auto color = lookup_color(pads[0]);
 
@@ -591,7 +609,7 @@ public:
         auto color = lookup_pads(pads[0]);
 
         for (const auto& pad : pads)
-            light_pad(pad, m_pressed, mode);
+             light_pad(pad, m_pressed, mode);
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -599,7 +617,13 @@ public:
     set_octave(uint8_t octave)
     //-------------------------------------------------------------------------------------------------------
     {
+        if (octave > m_octave) {
+            update_octave(1);
+        } else if (octave < m_octave){
+            update_octave(0);
+        }
 
+        m_octave = octave;
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -607,6 +631,19 @@ public:
     update_octave(bool change)
     //-------------------------------------------------------------------------------------------------------
     {
+        for (auto& ghost : ghost_notes)
+            update_note(ghost.index, m_octave, change, 0);
+
+        for (auto& held : held_notes)
+            update_note(held, m_octave, change, PadLightingMode::Pulse2);
+
+        for (auto& active : active_notes)
+        {
+            ghost_note ghost;
+            ghost.index = active;
+            ghost.octave = m_octave;
+            update_note(active, m_octave, change, 0);
+        }
 
     }
 
@@ -631,7 +668,7 @@ public:
 
         // device feedback
         for (auto& pad : pads)
-            light_pad(pad, m_pressed, 0);
+             light_pad(pad, m_pressed, 0);
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -665,12 +702,27 @@ public:
         else {
            // else, look for ghost notes
             auto n1 = lookup_note(n0);
+            ghost_note* rem = nullptr;
+
             for (auto& ghost : ghost_notes)
             {
-                auto candidate = n1+ghost*12;
-                //...
+                auto candidate = n1+ghost.octave*12;
+                if (candidate == ghost.index)
+                {
+                    note = candidate;
+                    pads = lookup_pads(candidate-m_octave*12);
+                    rem = &ghost;
+                    break;
+                }
             }
+
+            if (rem) std::remove(ghost_notes.begin(), ghost_notes.end(), *rem);
         }
+
+        m_output->noteOff(0, note, velocity);
+
+        for (auto& pad : pads)
+            light_pad(pad, color, 0);
     }
 };
 
