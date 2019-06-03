@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QQmlParserStatus>
+#include <QtDebug>
 
 namespace Ableton
 {
@@ -415,19 +416,47 @@ public:
 
     //-------------------------------------------------------------------------------------------------------
     void
-    set_x(uint8_t x) { m_x = x; update_grid(); }
+    set_x(uint8_t x)
+    // sets pad grid's x offset
+    //-------------------------------------------------------------------------------------------------------
+    {
+        m_x = x;
+        if (m_complete)
+            update_grid();
+    }
 
     //-------------------------------------------------------------------------------------------------------
     void
-    set_y(uint8_t y) { m_y = y; update_grid(); }
+    set_y(uint8_t y)
+    // sets pad grid's y offset
+    //-------------------------------------------------------------------------------------------------------
+    {
+        m_y = y;
+        if (m_complete)
+            update_grid();
+    }
 
     //-------------------------------------------------------------------------------------------------------
     void
-    set_w(uint8_t w) { m_w = w; update_grid(); }
+    set_w(uint8_t w)
+    // sets pad grid's width
+    //-------------------------------------------------------------------------------------------------------
+    {
+        m_w = w;
+        if (m_complete)
+            update_grid();
+    }
 
     //-------------------------------------------------------------------------------------------------------
     void
-    set_h(uint8_t h) { m_h = h; update_grid(); }
+    set_h(uint8_t h)
+    // sets pad grid's height
+    //-------------------------------------------------------------------------------------------------------
+    {
+        m_h = h;
+        if (m_complete)
+            update_grid();
+    }
 
     //-------------------------------------------------------------------------------------------------------
     void
@@ -451,8 +480,8 @@ public:
     //-------------------------------------------------------------------------------------------------------
     Q_INVOKABLE void
     display()
-    //-------------------------------------------------------------------------------------------------------
     // light on device'selected grid pads
+    //-------------------------------------------------------------------------------------------------------
     {
         for (auto& n : grid)
              padOn(n[PADNO], n[COLORNO], 0);
@@ -461,8 +490,8 @@ public:
     //-------------------------------------------------------------------------------------------------------
     Q_INVOKABLE void
     hide()
-    //-------------------------------------------------------------------------------------------------------
     // light off device'selected grid pads
+    //-------------------------------------------------------------------------------------------------------
     {        
         for (auto& n : grid)
              padOn(n[PADNO], 0, 0);
@@ -497,12 +526,20 @@ public:
                 else if (cphs < 0)
                     cphs += 12;
 
-                uint8_t padno    = m_y*8+y+m_x+x+36;
+                // padno    = 0-63, see above
+                // noteno   = the note (0-63) pad is mapped to
+                //            meaning a note can be triggered by two different pads
+
+                uint8_t padno    = (m_y+y)*8+m_x+x;
                 uint8_t colorno  = color_layout[cphs];
                 uint8_t noteno   = nphs;
 
                 cphs++; nphs++;
                 grid.push_back({padno, noteno, colorno});
+
+                qDebug() << "Pad number:" << padno
+                         << "Note number:" << noteno
+                         << "Color:" << colorno;
             }
 
             // wrapped/mirror padding
@@ -515,29 +552,69 @@ public:
 
     //-------------------------------------------------------------------------------------------------------
     uint8_t
-    lookup_note(uint8_t index) { return grid[index][NOTENO]; }
+    lookup_note(uint8_t pad_index)
+    // returns the note index mapped to target pad
+    //-------------------------------------------------------------------------------------------------------
+    {
+        for (auto& pad: grid)
+            if (pad[PADNO] == pad_index)
+                return pad[NOTENO];
+
+        assert(false);
+    }
 
     //-------------------------------------------------------------------------------------------------------
     uint8_t
-    lookup_color(uint8_t index) { return grid[index][COLORNO]; }
+    lookup_color(uint8_t pad_index)
+    // returns color mapped to target pad
+    //-------------------------------------------------------------------------------------------------------
+    {
+        for (auto& pad : grid)
+            if (pad[PADNO] == pad_index)
+                return pad[COLORNO];
+
+        assert(false);
+    }
 
     //-------------------------------------------------------------------------------------------------------
     padvector_t
     lookup_pads(uint8_t note)
+    // returns each pad mapped to target note
     //-------------------------------------------------------------------------------------------------------
-    {
-        padvector_t res = {};
-        uint8_t i = 0;
+    {        
+        padvector_t res = { -1, -1 };
+        // see next function
+
+        uint8_t i = 0;                
 
         for (auto& n : grid) {
-            assert(i < 2);
             if (n[NOTENO] == note) {
                 res[i] = n[PADNO];
                 ++i;
             }
         }
+
+        return res;
     }
 
+    //-------------------------------------------------------------------------------------------------------
+    void
+    output_pads(padvector_t& v, uint8_t color, uint8_t mode)
+    // as padvector_t will always have two elements
+    // we output only those >= 0
+    // this will prevent dynamic allocation
+    //-------------------------------------------------------------------------------------------------------
+    {
+        uint8_t n = 0;
+
+        while (v[n] >= 0) {
+            padOn(v[n], color, mode);
+            n++;
+        }
+    }
+
+    //-------------------------------------------------------------------------------------------------------
+    // OUTPUT SIGNALS
     //-------------------------------------------------------------------------------------------------------
 
     Q_SIGNAL void
@@ -555,33 +632,37 @@ public:
     //-------------------------------------------------------------------------------------------------------
     void
     update_note(uint8_t note, uint8_t oct, bool incdec, uint8_t mode)
+    // this is used when octave has changed
     //-------------------------------------------------------------------------------------------------------
     {
         uint8_t n0 = note-oct*12;
 
-        if (n0 && n0 < 63) { // turn off pads
+        // turn off old pads
+        if (n0 && n0 < 63) {
             auto pads  = lookup_pads(n0);
             auto color = lookup_color(pads[0]);
 
-            for (const auto& pad : pads)
-                padOn(pad, color, 0);
+            output_pads(pads, color, 0);
         }
 
-        // turn on new pads
         int8_t n1 = note-(m_octave+incdec)*12;
-        if (n1 < 0 && n1 > 63)
+
+        // if new pad is out of the grid's bounds
+        // do nothing
+        if (n1 < 0 || n1 > 63)
             return;
 
+        // turn on updated pads
         auto pads  = lookup_pads(n1);
         auto color = lookup_pads(pads[0]);
 
-        for (const auto& pad : pads)
-             padOn(pad, m_pressed, mode);
+        output_pads(pads, m_pressed, mode);
     }
 
     //-------------------------------------------------------------------------------------------------------
     void
     set_octave(uint8_t octave)
+    // TODO: fix this, make it not only ++ or --
     //-------------------------------------------------------------------------------------------------------
     {
         if (octave > m_octave) {
@@ -596,6 +677,7 @@ public:
     //-------------------------------------------------------------------------------------------------------
     void
     update_octave(bool change)
+    // TODO: fix this as well
     //-------------------------------------------------------------------------------------------------------
     {
         for (auto& ghost : ghost_notes)
@@ -611,12 +693,13 @@ public:
             ghost.octave = m_octave;
             update_note(active, m_octave, change, 0);
         }
-
     }
 
     //-------------------------------------------------------------------------------------------------------
     Q_INVOKABLE void
     note_on(unsigned int n0, unsigned int velocity)
+    // input note on receiver function, directly from device
+    // n0 is normalized from 0 to 63, meaning the '36' offset has to be removed first
     //-------------------------------------------------------------------------------------------------------
     {
         uint8_t note = lookup_note(n0);
@@ -633,14 +716,15 @@ public:
         noteOn(note, velocity);
         active_notes.push_back(note);
 
-        // device feedback
-        for (auto& pad : pads)
-             padOn(pad, m_pressed, 0);
+        // device feedback out
+        output_pads(pads, m_pressed, 0);
     }
 
     //-------------------------------------------------------------------------------------------------------
     Q_INVOKABLE void
     note_off(unsigned int n0, unsigned int velocity)
+    // input note off receiver function, directly from device
+    // n0 is normalized from 0 to 63, meaning the '36' offset has to be removed first
     //-------------------------------------------------------------------------------------------------------
     {
         auto note   = lookup_note(n0);
@@ -658,8 +742,7 @@ public:
             held_notes.push_back(note);
             auto plm = static_cast<uint8_t>(PadLightingMode::Pulse2);
 
-            for (auto& pad : pads)
-                padOn(pad, color, plm);
+            output_pads(pads, color, plm);
             return;
         }
 
@@ -687,9 +770,7 @@ public:
         }
 
         noteOff(note, velocity);
-
-        for (auto& pad : pads)
-            padOn(pad, color, 0);
+        output_pads(pads, color, 0);
     }
 };
 
