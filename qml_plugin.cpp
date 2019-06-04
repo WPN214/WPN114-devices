@@ -6,7 +6,7 @@
 
 void qml_plugin::registerTypes(const char *uri)
 {
-    Q_UNUSED ( uri );
+    Q_UNUSED (uri)
 
     qmlRegisterUncreatableType<Ableton::Push::CommandButtons, 1>
     ("WPN114.Devices", 1, 0, "CommandButtons", "Coucou");
@@ -16,9 +16,6 @@ void qml_plugin::registerTypes(const char *uri)
 
     qmlRegisterUncreatableType<Ableton::Push::ButtonLightingMode, 1>
     ("WPN114.Devices", 1, 0, "ButtonLightingMode", "Coucou");
-
-    qmlRegisterUncreatableType<Ableton::Push::ToggleContext, 1>
-    ("WPN114.Devices", 1, 0, "ToggleContext", "Coucou" );
 
     qmlRegisterUncreatableType<Ableton::Push::PadLightingMode, 1>
     ("WPN114.Devices", 1, 0, "PadLightingMode", "Coucou");

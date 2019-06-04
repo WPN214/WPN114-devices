@@ -7,72 +7,64 @@ Item
     id: root
     property alias midi_device: midi_hdl
 
-    signal play         ( );
-    signal record       ( );
-    signal octaveDown   ( );
-    signal octaveUp     ( );
-    signal session      ( );
-    signal track        ( );
+    signal play         ();
+    signal record       ();
+    signal octaveDown   ();
+    signal octaveUp     ();
+    signal session      ();
+    signal track        ();
     signal padOn        ( int index, int velocity);
     signal padOff       ( int index, int velocity);
-    signal leftArrow    ( );
-    signal rightArrow   ( );
+    signal leftArrow    ();
+    signal rightArrow   ();
     signal select       ( bool value );
     signal shift        ( bool value );
     signal knob         ( int index, int value );
     signal upToggle     ( int index, int value );
     signal downToggle   ( int index, int value );
+    signal modwheel     ( int value );
     signal bend         ( int value );
     signal aftertouch   ( int index, int value );
     signal pressure     ( int value );
 
-    function lightButton (index, mode)
-    {
+    function lightButton (index, mode) {
         midi_hdl.control(0, index, mode);
     }
 
-    function lightPad(index, color, mode)
-    {
+    function lightPad(index, color, mode) {
         midi_hdl.noteOn(mode, index+36, color );
     }
 
-    function lightToggle(row, index, mode)
-    {
+    function lightToggle(row, index, mode) {
         midi_hdl.control(0, row+index, mode );
     }
 
-    function lcdDisplay(row, column, str)
-    {
+    function lcdDisplay(row, column, str) {
         var sysx = [240, 71, 127, 21, 24+row, 0, str.length+1, column, str, 247];
         midi_hdl.sendVariant(sysx);
     }
 
-    function lcdClearline(index)
-    {
+    function lcdClearline(index) {
         var sysx = [240, 71, 127, 21, 28+index, 0, 0, 247];
         midi_hdl.sendVariant(sysx);
     }
 
-    function lcdClearAll()
-    {
+    function lcdClearAll() {
         for (var i = 0; i < 4; ++ i)
             lcdClearline(i);
     }
 
-    function padGridClear()
-    {
+    function padGridClear() {
         for (var i = 36; i < 100; ++i)
             midi_hdl.noteOn(0, i, 0);
     }
 
-    function setPitchBend()
-    {
+    function pitchbendTouch() {
         var sysx = [240, 71, 127, 21, 99, 0, 1, 5, 247];
         midi_hdl.sendVariant(sysx);
     }
 
-    function setModwheel()
-    {
+    function modwheelTouch() {
         var sysx = [240, 71, 127, 21, 99, 0, 1, 9, 247];
         midi_hdl.sendVariant(sysx);
     }
@@ -86,26 +78,29 @@ Item
 
         Component.onCompleted:
         {
-            console.log("MIDI In Devices:", midi_hdl.inDevices() )
-            console.log("MIDI Out Devices:", midi_hdl.outDevices() )
+            console.log("MIDI In Devices:", midi_hdl.inDevices())
+            console.log("MIDI Out Devices:", midi_hdl.outDevices())
         }
 
         onControlReceived:
         {
-            if       (index >= 71 && index <= 79)
+            if (index >= 71 && index <= 79)
                 root.knob(index-71, value);
 
-            else if  (index >= 20 && index <= 27)
+            else if (index == 0)
+                root.modwheel(value);
+
+            else if (index >= 20 && index <= 27)
                 root.upToggle(index-20, value);
 
-            else if  (index >= 102 && index <= 109)
+            else if (index >= 102 && index <= 109)
                 root.downToggle(index-102, value);
 
             else if (index === Push.CommandButtons.Select)
-                root.select( value );
+                root.select(value);
 
             else if (index === Push.CommandButtons.Shift)
-                root.shift( value );
+                root.shift(value);
 
             else if (index === Push.CommandButtons.LeftArrow && value)
                 root.leftArrow();
@@ -129,14 +124,12 @@ Item
                 root.play();
         }
 
-        onNoteOnReceived:
-        {
+        onNoteOnReceived: {
             if (index > 35 && index < 100)
                 root.padOn(index-36, velocity);
         }
 
-        onNoteOffReceived:
-        {
+        onNoteOffReceived: {
             if (index > 35 && index < 100)
                 root.padOff(index-36, velocity);
         }
