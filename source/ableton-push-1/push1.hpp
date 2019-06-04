@@ -609,41 +609,12 @@ public:
 
     //-------------------------------------------------------------------------------------------------------
     void
-    update_note(uint8_t note, uint8_t oct, uint8_t oct_d, uint8_t mode)
-    // this is used when octave has changed
-    //-------------------------------------------------------------------------------------------------------
-    {
-        uint8_t n0 = note-oct*12;
-
-        // turn off old pads
-        if (n0 && n0 < 63) {
-            auto pads  = lookup_pads(n0);
-            auto color = lookup_color(pads[0]);
-
-            output_pads(pads, color, 0);
-        }
-
-        int8_t n1 = note-(m_octave+oct_d)*12;
-
-        // if new pad is out of the grid's bounds
-        // do nothing
-        if (n1 < 0 || n1 > 63)
-            return;
-
-        // turn on updated pads
-        auto pads  = lookup_pads(n1);
-        auto color = lookup_pads(pads[0]);
-
-        output_pads(pads, m_pressed, mode);
-    }
-
-    //-------------------------------------------------------------------------------------------------------
-    void
     set_octave(uint8_t octave)
     // updates current notes position if octave changes
     //-------------------------------------------------------------------------------------------------------
     {
-        if (octave != m_octave) {
+        if (octave >= 0 && octave < 10 &&
+            octave != m_octave) {
             update_octave(octave-m_octave);
             m_octave = octave;
         }
@@ -661,13 +632,46 @@ public:
         for (auto& held : held_notes)
             update_note(held, m_octave, delta, PadLightingMode::Pulse2);
 
-        for (auto& active : active_notes)
-        {
-            ghost_note ghost;
-            ghost.index = active;
-            ghost.octave = m_octave;
+        for (auto& active : active_notes) {
+            // all active notes become 'ghost notes'
+            ghost_note ghost = { active, m_octave };
+            ghost_notes.push_back(ghost);
             update_note(active, m_octave, delta, 0);
         }
+
+        active_notes.clear();
+    }   
+
+    //-------------------------------------------------------------------------------------------------------
+    void
+    update_note(uint8_t note, uint8_t oct, uint8_t oct_d, uint8_t mode)
+    // this is used when octave has changed
+    //-------------------------------------------------------------------------------------------------------
+    {
+        int8_t n0 = note-oct*12;
+
+        // turn off old pads
+        // 42 is the highest n0 that would be in the grid
+        // given the wrapped/mirror layout
+        if (n0 >= 0 && n0 <= 42) {
+            auto pads  = lookup_pads(n0);
+            auto color = lookup_color(pads[0]);
+
+            output_pads(pads, color, 0);
+        }
+
+        int8_t n1 = note-(m_octave+oct_d)*12;
+
+        // if new pad is out of the grid's bounds
+        // do nothing
+        if (n1 < 0 || n1 > 42)
+            return;
+
+        // turn on updated pads
+        auto pads  = lookup_pads(n1);
+        auto color = lookup_pads(pads[0]);
+
+        output_pads(pads, m_pressed, mode);
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -720,7 +724,8 @@ public:
         note += m_octave*12;
 
         // if note is registered as a 'held note', erase it
-        std::remove(held_notes.begin(), held_notes.end(), note);
+        held_notes.erase(std::remove(held_notes.begin(), held_notes.end(), note),
+                         held_notes.end());
 
         // if select button is pressed, register note as 'held'
         if (m_hold)
@@ -733,9 +738,12 @@ public:
         }
 
         // if active, erase from active notes
-        if (std::find(active_notes.begin(), active_notes.end(), note) != active_notes.end())
-            std::remove(active_notes.begin(), active_notes.end(), note);
-        else {
+        if (std::find(active_notes.begin(), active_notes.end(), note) != active_notes.end()) {
+            active_notes.erase(std::remove(active_notes.begin(), active_notes.end(), note),
+                               active_notes.end());
+        }
+        else
+        {
            // else, look for ghost notes
             auto n1 = lookup_note(n0);
             ghost_note* rem = nullptr;
@@ -752,7 +760,10 @@ public:
                 }
             }
 
-            if (rem) std::remove(ghost_notes.begin(), ghost_notes.end(), *rem);
+            if (rem) {
+                ghost_notes.erase(std::remove(ghost_notes.begin(), ghost_notes.end(), *rem),
+                                  ghost_notes.end());
+            }
         }
 
         noteOff(note, velocity);
