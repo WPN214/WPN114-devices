@@ -650,10 +650,12 @@ public:
     {
         int8_t n0 = note-oct*12;
 
-        // turn off old pads
-        // 42 is the highest n0 that would be in the grid
-        // given the wrapped/mirror layout
-        if (n0 >= 0 && n0 <= 42) {
+        // these are the min/max n0 values
+        // contained in the current grid
+        uint8_t nmin = grid.front()[NOTENO];
+        uint8_t nmax = grid.back()[NOTENO];
+
+        if (n0 >= nmin && n0 <= nmax) {
             auto pads  = lookup_pads(n0);
             auto color = lookup_color(pads[0]);
 
@@ -664,7 +666,7 @@ public:
 
         // if new pad is out of the grid's bounds
         // do nothing
-        if (n1 < 0 || n1 > 42)
+        if (n1 < nmin || n1 > nmax)
             return;
 
         // turn on updated pads
