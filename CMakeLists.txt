@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.1)
-project(wpn114devices-qml LANGUAGES C CXX)
+project(wpn114devices-qml LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -10,8 +10,8 @@ find_package(Qt5 REQUIRED COMPONENTS Quick Core Qml)
 
 set(WPN114DEVICES_QML_SOURCES
     qml_plugin.cpp
-    source/devices.hpp
-    source/devices.cpp
+    source/ableton-push-1/push1.hpp
+    source/ableton-push-1/push1.cpp
     qml/PushDevice.qml
     )
 

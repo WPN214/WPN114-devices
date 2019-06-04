@@ -5,13 +5,13 @@
 #include <QQmlParserStatus>
 #include <QtDebug>
 
-namespace Ableton
-{
-namespace Push
-{
-
+//-------------------------------------------------------------------------------------------------------
+namespace Ableton {
+namespace Push {
 //-------------------------------------------------------------------------------------------------------
 class CommandButtons : public QObject
+// these are the CC indexes
+// each button outputs 127 (when pressed) and 0 (when released)
 //-------------------------------------------------------------------------------------------------------
 {
     Q_OBJECT
@@ -123,30 +123,13 @@ class ButtonLightingMode : public QObject
 
     enum Values
     {
-        Off = 0,
-        Dim = 1,
-        DimBlinkSlow = 2,
-        DimBlinkFast = 3,
-        Full = 4,
-        FullBlinkSlow = 5,
-        FullBlinkFast = 6
-    };
-
-    Q_ENUM (Values)
-};
-
-//-------------------------------------------------------------------------------------------------------
-class ToggleContext : public QObject
-//-------------------------------------------------------------------------------------------------------
-{
-    Q_OBJECT
-    public:
-
-    enum Values
-    {
-        TrackEnable  = 0,
-        TrackMute    = 1,
-        TrackSolo    = 2
+        Off                 = 0,
+        Dim                 = 1,
+        DimBlinkSlow        = 2,
+        DimBlinkFast        = 3,
+        Full                = 4,
+        FullBlinkSlow       = 5,
+        FullBlinkFast       = 6
     };
 
     Q_ENUM (Values)
@@ -176,7 +159,7 @@ class PadLightingMode : public QObject
         Blink16      = 12,
         Blink8       = 13,
         Blink4       = 14,
-        Blin2        = 15
+        Blink2       = 15
     };
 
     Q_ENUM (Values)
@@ -264,6 +247,9 @@ class PadColor : public QObject
 
 //-------------------------------------------------------------------------------------------------------
 class ToggleRow : public QObject
+// CC index offset for upper and lower toggle rows
+// upper row will go from 20 to 27
+// lower row will go from 102 to 109
 //-------------------------------------------------------------------------------------------------------
 {
     Q_OBJECT
@@ -281,6 +267,10 @@ class ToggleRow : public QObject
 
 //-------------------------------------------------------------------------------------------------------
 class ChromaticModel : public QObject, public QQmlParserStatus
+// emulates ableton push 1 chromatic note layout (with a few additions, like held notes
+// and custom color layout)
+// takes note-on/note-off/aftertouch as input
+// outputs processed note-on/note-off/aftertouch and pad feedback to send to the device
 //-------------------------------------------------------------------------------------------------------
 {
     Q_OBJECT
@@ -513,17 +503,6 @@ public:
         grid.clear();
         int8_t cphs = 0, nphs = 0;
 
-        // [56 ] [57 ] [58 ] [59 ] [60 ] [61 ] [62 ] [63 ]  ^
-        // [48 ] [49 ] [50 ] [51 ] [52 ] [53 ] [54 ] [55 ]  |
-        // [40 ] [41 ] [42 ] [43 ] [44 ] [45 ] [46 ] [47 ]  |
-        // [32 ] [33 ] [34 ] [35 ] [36 ] [37 ] [38 ] [39 ]  |
-        // [24 ] [25 ] [26 ] [27 ] [28 ] [29 ] [30 ] [31 ]  |
-        // [16 ] [17 ] [18 ] [19 ] [20 ] [21 ] [22 ] [23 ]  |
-        // [ 8 ] [ 9 ] [10 ] [11 ] [12 ] [13 ] [14 ] [15 ]  |
-        // [ 0 ] [ 1 ] [ 2 ] [ 3 ] [ 4 ] [ 5 ] [ 6 ] [ 7 ]  y
-
-        // -----------------------------------------------> x
-
             for (uint8_t y = 0; y < m_h; ++y) {
             for (uint8_t x = 0; x < m_w; ++x)
             {
@@ -532,7 +511,7 @@ public:
                 else if (cphs < 0)
                     cphs += 12;
 
-                // padno    = 0-63, see above
+                // padno    = 0-63 (given current width, height and xy offsets)
                 // noteno   = the note (0-63) pad is mapped to
                 //            meaning a note can be triggered by two different pads
 
@@ -630,7 +609,7 @@ public:
 
     //-------------------------------------------------------------------------------------------------------
     void
-    update_note(uint8_t note, uint8_t oct, bool incdec, uint8_t mode)
+    update_note(uint8_t note, uint8_t oct, uint8_t oct_d, uint8_t mode)
     // this is used when octave has changed
     //-------------------------------------------------------------------------------------------------------
     {
@@ -644,7 +623,7 @@ public:
             output_pads(pads, color, 0);
         }
 
-        int8_t n1 = note-(m_octave+incdec)*12;
+        int8_t n1 = note-(m_octave+oct_d)*12;
 
         // if new pad is out of the grid's bounds
         // do nothing
@@ -661,42 +640,50 @@ public:
     //-------------------------------------------------------------------------------------------------------
     void
     set_octave(uint8_t octave)
-    // TODO: fix this, make it not only ++ or --
+    // updates current notes position if octave changes
     //-------------------------------------------------------------------------------------------------------
     {
-        if (octave > m_octave) {
-            update_octave(1);
-        } else if (octave < m_octave){
-            update_octave(0);
+        if (octave != m_octave) {
+            update_octave(octave-m_octave);
+            m_octave = octave;
         }
-
-        m_octave = octave;
     }
 
     //-------------------------------------------------------------------------------------------------------
     void
-    update_octave(bool change)
-    // TODO: fix this as well
+    update_octave(uint8_t delta)
+    // update active and held notes
     //-------------------------------------------------------------------------------------------------------
     {
         for (auto& ghost : ghost_notes)
-            update_note(ghost.index, m_octave, change, 0);
+            update_note(ghost.index, m_octave, delta, 0);
 
         for (auto& held : held_notes)
-            update_note(held, m_octave, change, PadLightingMode::Pulse2);
+            update_note(held, m_octave, delta, PadLightingMode::Pulse2);
 
         for (auto& active : active_notes)
         {
             ghost_note ghost;
             ghost.index = active;
             ghost.octave = m_octave;
-            update_note(active, m_octave, change, 0);
+            update_note(active, m_octave, delta, 0);
         }
     }
 
     //-------------------------------------------------------------------------------------------------------
     Q_INVOKABLE void
-    note_on(unsigned int n0, unsigned int velocity)
+    process_aftertouch(unsigned int n0, unsigned int value)
+    // no device feedback for now...
+    //-------------------------------------------------------------------------------------------------------
+    {
+        uint8_t note = lookup_note(n0);
+        note += m_octave*12;
+        aftertouch(note, value);
+    }
+
+    //-------------------------------------------------------------------------------------------------------
+    Q_INVOKABLE void
+    process_note_on(unsigned int n0, unsigned int velocity)
     // input note on receiver function, directly from device
     // n0 is normalized from 0 to 63, meaning the '36' offset has to be removed first
     //-------------------------------------------------------------------------------------------------------
@@ -721,7 +708,7 @@ public:
 
     //-------------------------------------------------------------------------------------------------------
     Q_INVOKABLE void
-    note_off(unsigned int n0, unsigned int velocity)
+    process_note_off(unsigned int n0, unsigned int velocity)
     // input note off receiver function, directly from device
     // n0 is normalized from 0 to 63, meaning the '36' offset has to be removed first
     //-------------------------------------------------------------------------------------------------------
@@ -730,7 +717,7 @@ public:
         auto color  = lookup_color(n0);
         auto pads   = lookup_pads(note);
 
-        note *= m_octave*12;
+        note += m_octave*12;
 
         // if note is registered as a 'held note', erase it
         std::remove(held_notes.begin(), held_notes.end(), note);

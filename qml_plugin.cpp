@@ -1,6 +1,6 @@
 #include "qml_plugin.hpp"
 
-#include <source/devices.hpp>
+#include <source/ableton-push-1/push1.hpp>
 #include <QQmlEngine>
 #include <qqml.h>
 
