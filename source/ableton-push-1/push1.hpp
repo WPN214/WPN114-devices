@@ -329,8 +329,7 @@ class ChromaticModel : public QObject, public QQmlParserStatus
     grid;
 
     //-------------------------------------------------------------------------------------------------------
-    enum padnote_layout
-    { PADNO, NOTENO, COLORNO };
+    enum padnote_layout { PADNO, NOTENO, COLORNO };
 
     //-------------------------------------------------------------------------------------------------------
     std::vector<uint8_t>
@@ -343,7 +342,8 @@ class ChromaticModel : public QObject, public QQmlParserStatus
         uint8_t index;
         uint8_t octave;
 
-        bool operator==(ghost_note const& other)
+        bool
+        operator==(ghost_note const& other)
         {
             return index == other.index && octave == other.octave;
         }
@@ -713,6 +713,20 @@ public:
     }
 
     //-------------------------------------------------------------------------------------------------------
+    template<typename T> void
+    erase_note(std::vector<T>& v, T note)
+    {
+        v.erase(std::remove(v.begin(), v.end(), note), v.end());
+    }
+
+    //-------------------------------------------------------------------------------------------------------
+    template<typename T> bool
+    contains_note(std::vector<T>& v, T note)
+    {
+        return std::find(v.begin(), v.end(), note) != v.end();
+    }
+
+    //-------------------------------------------------------------------------------------------------------
     Q_INVOKABLE void
     process_note_off(unsigned int n0, unsigned int velocity)
     // input note off receiver function, directly from device
@@ -725,9 +739,8 @@ public:
 
         note += m_octave*12;
 
-        // if note is registered as a 'held note', erase it
-        held_notes.erase(std::remove(held_notes.begin(), held_notes.end(), note),
-                         held_notes.end());
+        // if note is registered as a 'held note', erase it        
+        erase_note(held_notes, note);
 
         // if select button is pressed, register note as 'held'
         if (m_hold)
@@ -740,10 +753,8 @@ public:
         }
 
         // if active, erase from active notes
-        if (std::find(active_notes.begin(), active_notes.end(), note) != active_notes.end()) {
-            active_notes.erase(std::remove(active_notes.begin(), active_notes.end(), note),
-                               active_notes.end());
-        }
+        if (contains_note(active_notes, note))
+            erase_note(active_notes, note);
         else
         {
            // else, look for ghost notes
@@ -762,10 +773,8 @@ public:
                 }
             }
 
-            if (rem) {
-                ghost_notes.erase(std::remove(ghost_notes.begin(), ghost_notes.end(), *rem),
-                                  ghost_notes.end());
-            }
+            assert(rem);
+            erase_note(ghost_notes, *rem);
         }
 
         noteOff(note, velocity);
