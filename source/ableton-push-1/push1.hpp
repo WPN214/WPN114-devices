@@ -271,6 +271,9 @@ class ChromaticModel : public QObject, public QQmlParserStatus
 // and custom color layout)
 // takes note-on/note-off/aftertouch as input
 // outputs processed note-on/note-off/aftertouch and pad feedback to send to the device
+
+// NOTE: the processing is asynchronous for now, for practical reasons
+// but it should be done synchronously in the future
 //-------------------------------------------------------------------------------------------------------
 {
     Q_OBJECT
