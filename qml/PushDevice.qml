@@ -6,13 +6,11 @@ WPN114.MIDIGateway
 {    
     id: root
 
-    //---------------------------------------------------------------------------------------------
-    property WPN114.External
-    external;
+    property alias in_channel: input.channels
+    property alias out_channel: output.channels
 
-    //---------------------------------------------------------------------------------------------
-    midi_in.assign:   WPN114.Input    { type: WPN114.Input.Midi; external: external}
-    midi_out.assign:  WPN114.Output   { type: WPN114.Input.Midi; external: external }
+    midi_in.assign: WPN114.Input { id: input; type: WPN114.Input.Midi }
+    midi_out.assign: WPN114.Output { id: output; type: WPN114.Input.Midi }
 
     //---------------------------------------------------------------------------------------------
     signal
@@ -163,31 +161,31 @@ WPN114.MIDIGateway
         else if (index >= 102 && index <= 109)
             root.downToggle(index-102, value);
 
-        else if (index === Push.CommandButtons.Select)
+        else if (index === CommandButtons.Select)
             root.select(value);
 
-        else if (index === Push.CommandButtons.Shift)
+        else if (index === CommandButtons.Shift)
             root.shift(value);
 
-        else if (index === Push.CommandButtons.LeftArrow && value)
+        else if (index === CommandButtons.LeftArrow && value)
             root.leftArrow();
 
-        else if (index === Push.CommandButtons.RightArrow && value)
+        else if (index === CommandButtons.RightArrow && value)
             root.rightArrow();
 
-        else if (index === Push.CommandButtons.OctaveDown && value)
+        else if (index === CommandButtons.OctaveDown && value)
             root.octaveDown();
 
-        else if (index === Push.CommandButtons.OctaveUp && value)
+        else if (index === CommandButtons.OctaveUp && value)
             root.octaveUp();
 
-        else if (index === Push.CommandButtons.Session && value)
+        else if (index === CommandButtons.Session && value)
             root.session();
 
-        else if (index === Push.CommandButtons.Note && value)
+        else if (index === CommandButtons.Note && value)
             root.track();
 
-        else if (index === Push.CommandButtons.Play && value)
+        else if (index === CommandButtons.Play && value)
             root.play();
     }
 

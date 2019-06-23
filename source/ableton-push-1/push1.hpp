@@ -402,9 +402,6 @@ public:
 
         update_grid();
         m_complete = true;
-
-        if (m_visible)
-            display();
     }
 
     virtual ~ChromaticModel() override
@@ -573,7 +570,7 @@ public:
         for (auto& n : grid) {
             if (n[NOTENO] == note) {
                 res[i] = n[PADNO];
-                ++i;
+                i++;
             }
         }
 
