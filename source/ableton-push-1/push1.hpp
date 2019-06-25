@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QQmlParserStatus>
 #include <QtDebug>
+#include <wpn114audio/graph.hpp>
 
 //-------------------------------------------------------------------------------------------------------
 namespace Ableton {
@@ -266,17 +267,21 @@ class ToggleRow : public QObject
 };
 
 //-------------------------------------------------------------------------------------------------------
-class ChromaticModel : public QObject, public QQmlParserStatus
+class ChromaticModel : public Node
 // emulates ableton push 1 chromatic note layout (with a few additions, like held notes
 // and custom color layout)
-// takes note-on/note-off/aftertouch as input
-// outputs processed note-on/note-off/aftertouch and pad feedback to send to the device
-
-// NOTE: the processing is asynchronous for now, for practical reasons
-// but it should be done synchronously in the future
 //-------------------------------------------------------------------------------------------------------
 {
     Q_OBJECT
+
+    WPN_DECLARE_DEFAULT_MIDI_INPUT (dev_in, 1)
+    WPN_DECLARE_MIDI_INPUT(aux_in, 1)
+
+    WPN_DECLARE_DEFAULT_MIDI_OUTPUT(dev_out, 1)
+    WPN_DECLARE_MIDI_OUTPUT(aux_out, 1)
+
+    // TODO: for Arpeggiator and Repeater functions
+    WPN_DECLARE_DEFAULT_AUDIO_INPUT(clock_in, 1)
 
     //-------------------------------------------------------------------------------------------------------
     Q_PROPERTY (int dark MEMBER m_dark)
@@ -315,53 +320,71 @@ class ChromaticModel : public QObject, public QQmlParserStatus
     Q_INTERFACES (QQmlParserStatus)
 
     //-------------------------------------------------------------------------------------------------------
-    uint8_t m_dark = 0, m_medium = 0, m_bright = 0, m_pressed = 0;
-    uint8_t m_x = 0, m_y = 0, m_w = 8, m_h = 8;
-
-    uint8_t m_octave = 4;
-    bool m_hold = false;
-    bool m_visible = false;
-    bool m_complete = false;
+    using note_t       = byte_t;
+    using octave_t     = byte_t;
+    using color_t      = byte_t;
+    using padnote_t    = std::array<uint8_t, 3>;
 
     //-------------------------------------------------------------------------------------------------------
-    using padnote_t    = std::array<uint8_t, 3>;
-    using padvector_t  = std::array<int8_t, 2>;
+    color_t
+    m_dark      = 0,
+    m_medium    = 0,
+    m_bright    = 0,
+    m_pressed   = 0;
+
+    uint8_t
+    m_x = 0,
+    m_y = 0,
+    m_w = 8,
+    m_h = 8;
+
+    octave_t
+    m_octave = 4;
+
+    bool
+    m_hold      = false,
+    m_visible   = false,
+    m_complete  = false;
 
     //-------------------------------------------------------------------------------------------------------
     std::vector<padnote_t>
     grid;
 
     //-------------------------------------------------------------------------------------------------------
-    enum padnote_layout { PADNO, NOTENO, COLORNO };
-
-    //-------------------------------------------------------------------------------------------------------
-    std::vector<uint8_t>
-    held_notes;
+    enum
+    padnote_layout { padno, noteno, colorno };
 
     //-------------------------------------------------------------------------------------------------------
     struct ghost_note
     //-------------------------------------------------------------------------------------------------------
     {
-        uint8_t index;
-        uint8_t octave;
+        note_t index;
+        octave_t octave;
 
         bool
-        operator==(ghost_note const& other)
-        {
-            return index == other.index && octave == other.octave;
+        operator==(ghost_note const& other) {
+            return index == other.index &&
+                   octave == other.octave;
         }
     };
 
     //-------------------------------------------------------------------------------------------------------
-    std::vector<uint8_t>
-    active_notes;
+    struct padvector_t { byte_t npads = 0, pads[2] = { 0, 0 }; };
+
+    //-------------------------------------------------------------------------------------------------------
+    std::vector<note_t>
+    active_notes,
+    held_notes;
 
     //-------------------------------------------------------------------------------------------------------
     std::vector<ghost_note>
     ghost_notes;
 
+    midibuffer
+    m_async_buffer;
+
     //-------------------------------------------------------------------------------------------------------
-    uint8_t
+    color_t
     color_layout[12];
 
 public:
@@ -402,9 +425,14 @@ public:
 
         update_grid();
         m_complete = true;
+
+        Node::componentComplete();
     }
 
-    virtual ~ChromaticModel() override
+    //-------------------------------------------------------------------------------------------------------
+    virtual
+    ~ChromaticModel() override
+    //-------------------------------------------------------------------------------------------------------
     {
         if (m_visible)
             hide();
@@ -477,27 +505,41 @@ public:
     Q_INVOKABLE void
     display()
     // light on device'selected grid pads
+    // this is asynchronous
     //-------------------------------------------------------------------------------------------------------
     {
-        for (auto& n : grid)
-             padOn(n[PADNO], n[COLORNO], 0);
+        for (auto& pad : grid)
+        {
+            midi_t* mt  = m_async_buffer.reserve(2);
+            mt->frame   = 0;
+            mt->status  = 0x90;
+            mt->data[0] = pad[padno]+36;
+            mt->data[1] = pad[colorno];
+        }
     }
 
     //-------------------------------------------------------------------------------------------------------
     Q_INVOKABLE void
     hide()
     // light off device'selected grid pads
+    // this is asynchronous
     //-------------------------------------------------------------------------------------------------------
     {        
-        for (auto& n : grid)
-             padOn(n[PADNO], 0, 0);
+        for (auto& pad : grid)
+        {
+            midi_t* mt  = m_async_buffer.reserve(2);
+            mt->frame   = 0;
+            mt->status  = 0x90;
+            mt->data[0] = pad[padno]+36;
+            mt->data[1] = 0;
+        }
     }
 
     //-------------------------------------------------------------------------------------------------------
     void
     update_grid()
-    // this should be called whenever a change in the grid's dimensions occurs
-    // or in the grid's xy offset
+    // this should be called whenever a change in the grid's
+    // dimensions or coordinates occurs
     //-------------------------------------------------------------------------------------------------------
     {
         grid.clear();
@@ -514,7 +556,6 @@ public:
                 // padno    = 0-63 (given current width, height and xy offsets)
                 // noteno   = the note (0-63) pad is mapped to
                 //            meaning a note can be triggered by two different pads
-
                 uint8_t padno    = (m_y+y)*8+m_x+x;
                 uint8_t colorno  = color_layout[cphs];
                 uint8_t noteno   = nphs;
@@ -532,119 +573,102 @@ public:
     }
 
     //-------------------------------------------------------------------------------------------------------
-    uint8_t
-    lookup_note(uint8_t pad_index)
-    // returns the note index mapped to target pad
-    //-------------------------------------------------------------------------------------------------------
-    {
-        for (auto& pad: grid)
-            if (pad[PADNO] == pad_index)
-                return pad[NOTENO];
-
-        assert(false);
-    }
-
-    //-------------------------------------------------------------------------------------------------------
-    uint8_t
-    lookup_color(uint8_t pad_index)
-    // returns color mapped to target pad
+    note_t
+    lookup_note(note_t n0)
     //-------------------------------------------------------------------------------------------------------
     {
         for (auto& pad : grid)
-            if (pad[PADNO] == pad_index)
-                return pad[COLORNO];
+            if (pad[padno] == n0)
+                return pad[noteno];
 
-        assert(false);
+        return 0;
     }
 
     //-------------------------------------------------------------------------------------------------------
     padvector_t
-    lookup_pads(uint8_t note)
-    // returns each pad mapped to target note
+    lookup_pads(note_t note)
     //-------------------------------------------------------------------------------------------------------
-    {        
-        padvector_t res = { -1, -1 };
-        // see next function
-        uint8_t i = 0;                
+    {
+        padvector_t pvec;
 
-        for (auto& n : grid) {
-            if (n[NOTENO] == note) {
-                res[i] = n[PADNO];
-                i++;
-            }
-        }
+        for (auto& pad : grid)
+            if (pad[noteno] == note && pvec.npads < 2) {
+                pvec.pads[pvec.npads] = pad[padno];
+                pvec.npads++;
+            } else if (pvec.npads == 2) break;
 
-        return res;
+        return pvec;
+    }
+
+    //-------------------------------------------------------------------------------------------------------
+    color_t
+    lookup_color(note_t pad_index)
+    //-------------------------------------------------------------------------------------------------------
+    {
+        for (auto& pad : grid)
+            if (pad[padno] == pad_index)
+                return pad[colorno];
+        return 0;
     }
 
     //-------------------------------------------------------------------------------------------------------
     void
-    output_pads(padvector_t& v, uint8_t color, uint8_t mode)
-    // as padvector_t will always have two elements
-    // we output only those >= 0
-    // this will prevent dynamic allocation
+    output_pads(padvector_t pvec, color_t color, byte_t mode, vector_t frame, midibuffer& dev_out)
     //-------------------------------------------------------------------------------------------------------
     {
-        for (uint8_t n = 0; n < 2; ++n)
-            if (v[n] >= 0)
-                padOn(v[n], color, mode);
-            else return;
-    }
-
-    //-------------------------------------------------------------------------------------------------------
-    // OUTPUT SIGNALS
-    //-------------------------------------------------------------------------------------------------------
-
-    Q_SIGNAL void
-    noteOn(unsigned int index, unsigned int velocity);
-
-    Q_SIGNAL void
-    noteOff(unsigned int index, unsigned int velocity);
-
-    Q_SIGNAL void
-    aftertouch(unsigned int index, unsigned int value);
-
-    Q_SIGNAL void
-    padOn(unsigned int index, unsigned int color, unsigned int mode);
-
-    //-------------------------------------------------------------------------------------------------------
-    void
-    set_octave(uint8_t octave)
-    // updates current notes position if octave changes
-    //-------------------------------------------------------------------------------------------------------
-    {
-        if (octave >= 0 && octave < 10 &&
-            octave != m_octave) {
-            update_octave(octave-m_octave);
-            m_octave = octave;
+        for (byte_t n = 0; n < pvec.npads; ++n)
+        {
+            midi_t* mt  = dev_out.reserve(2);
+            mt->frame   = frame;
+            mt->status  = 0x90+mode;
+            mt->data[0] = pvec.pads[n];
+            mt->data[1] = color;
         }
     }
 
     //-------------------------------------------------------------------------------------------------------
+     void
+     set_octave(uint8_t octave)
+     // updates current notes position if octave changes
+     //-------------------------------------------------------------------------------------------------------
+     {
+         if (octave >= 0 && octave < 10 &&
+             octave != m_octave) {
+             m_octave = octave;
+         }
+     }
+
+    //-------------------------------------------------------------------------------------------------------
     void
-    update_octave(uint8_t delta)
+    update_octave(int8_t delta, vector_t frame, midibuffer& dev_out)
     // update active and held notes
     //-------------------------------------------------------------------------------------------------------
     {
+        if (m_octave+delta == 0 || m_octave+delta == 10)
+            return;
+
         for (auto& ghost : ghost_notes)
-            update_note(ghost.index, m_octave, delta, 0);
+            update_note(ghost.index, m_octave, delta, 0, frame, dev_out);
 
         for (auto& held : held_notes)
-            update_note(held, m_octave, delta, PadLightingMode::Pulse2);
+            update_note(held, m_octave, delta, PadLightingMode::Pulse2, frame, dev_out);
 
         for (auto& active : active_notes) {
             // all active notes become 'ghost notes'
             ghost_note ghost = { active, m_octave };
             ghost_notes.push_back(ghost);
-            update_note(active, m_octave, delta, 0);
+            update_note(active, m_octave, delta, 0, frame, dev_out);
         }
 
         active_notes.clear();
-    }   
+        m_octave += delta;
+    }
 
     //-------------------------------------------------------------------------------------------------------
     void
-    update_note(uint8_t note, uint8_t oct, uint8_t oct_d, uint8_t mode)
+    update_note(note_t note, byte_t oct, int8_t oct_d,
+                uint8_t mode, vector_t frame,
+                midibuffer& dev_out)
     // this is used when octave has changed
     //-------------------------------------------------------------------------------------------------------
     {
@@ -652,14 +676,13 @@ public:
 
         // these are the min/max n0 values
         // contained in the current grid
-        uint8_t nmin = grid.front()[NOTENO];
-        uint8_t nmax = grid.back()[NOTENO];
+        uint8_t nmin = grid.front()[noteno];
+        uint8_t nmax = grid.back()[noteno];
 
         if (n0 >= nmin && n0 <= nmax) {
             auto pads  = lookup_pads(n0);
-            auto color = lookup_color(pads[0]);
-
-            output_pads(pads, color, 0);
+            auto color = lookup_color(pads.pads[0]);
+            output_pads(pads, color, 0, frame, dev_out);
         }
 
         int8_t n1 = note-(m_octave+oct_d)*12;
@@ -670,94 +693,61 @@ public:
             return;
 
         // turn on updated pads
-        auto pads  = lookup_pads(n1);
-        auto color = lookup_pads(pads[0]);
+        auto pvec  = lookup_pads(n1);
+        auto color = lookup_pads(pvec.pads[0]);
 
-        output_pads(pads, m_pressed, mode);
-    }
-
-    //-------------------------------------------------------------------------------------------------------
-    Q_INVOKABLE void
-    process_aftertouch(unsigned int n0, unsigned int value)
-    // no device feedback for now...
-    //-------------------------------------------------------------------------------------------------------
-    {
-        uint8_t note = lookup_note(n0);
-        note += m_octave*12;
-        aftertouch(note, value);
-    }
+        output_pads(pvec, m_pressed, mode, frame, dev_out);
+}
 
     //-------------------------------------------------------------------------------------------------------
-    Q_INVOKABLE void
-    process_note_on(unsigned int n0, unsigned int velocity)
-    // input note on receiver function, directly from device
-    // n0 is normalized from 0 to 63, meaning the '36' offset has to be removed first
+    void
+    process_note_on(midi_t& mt, midibuffer& dev_out, midibuffer& aux_out)
     //-------------------------------------------------------------------------------------------------------
     {
-        uint8_t note = lookup_note(n0);
-        auto pads = lookup_pads(note);
+        note_t
+        n0 = mt.data[0]-36,
+        note = lookup_note(n0) + m_octave*12;
 
-        note += m_octave*12;
+        if (contains_note(held_notes, note))
+            return;
 
-        // if note is registered as a 'held' note, do nothing
-        for (auto& held : held_notes)
-            if (note == held)
-                return;
-
-        // output note
-        noteOn(note, velocity);
+        mt.data[0] = note;
+        aux_out.push(mt);
         active_notes.push_back(note);
 
-        // device feedback out
-        output_pads(pads, m_pressed, 0);
+        auto pads = lookup_pads(note);
+        output_pads(pads, m_pressed, 0, mt.frame, dev_out);
     }
 
     //-------------------------------------------------------------------------------------------------------
-    template<typename T> void
-    erase_note(std::vector<T>& v, T note)
+    void
+    process_note_off(midi_t& mt, midibuffer& dev_out, midibuffer& aux_out)
+    //-------------------------------------------------------------------------------------------------------
     {
-        v.erase(std::remove(v.begin(), v.end(), note), v.end());
-    }
+        note_t
+        n0 = mt.data[0]-36,
+        note = lookup_note(n0) + m_octave*12;
 
-    //-------------------------------------------------------------------------------------------------------
-    template<typename T> bool
-    contains_note(std::vector<T>& v, T note)
-    {
-        return std::find(v.begin(), v.end(), note) != v.end();
-    }
-
-    //-------------------------------------------------------------------------------------------------------
-    Q_INVOKABLE void
-    process_note_off(unsigned int n0, unsigned int velocity)
-    // input note off receiver function, directly from device
-    // n0 is normalized from 0 to 63, meaning the '36' offset has to be removed first
-    //-------------------------------------------------------------------------------------------------------
-    {
-        auto note   = lookup_note(n0);
-        auto color  = lookup_color(n0);
+        auto color  = lookup_color(note);
         auto pads   = lookup_pads(note);
 
-        note += m_octave*12;
-
-        // if note is registered as a 'held note', erase it        
+        // if note is already registered as
+        // a 'held note', erase it
         erase_note(held_notes, note);
 
-        // if select button is pressed, register note as 'held'
-        if (m_hold)
-        {
+        if (m_hold) {
+             // if select button is pressed, register note as 'held'
             held_notes.push_back(note);
-            auto plm = static_cast<uint8_t>(PadLightingMode::Pulse2);
-
-            output_pads(pads, color, plm);
-            return;
+            output_pads(pads, color, PadLightingMode::Pulse2, mt.frame, dev_out);
         }
 
-        // if active, erase from active notes
         if (contains_note(active_notes, note))
             erase_note(active_notes, note);
+
         else
+        // if note is not registered as active, it should be a 'ghost' note
+        // meaning a note for which the pad indexes have changed during octave change
         {
-           // else, look for ghost notes
             auto n1 = lookup_note(n0);
             ghost_note* rem = nullptr;
 
@@ -777,8 +767,108 @@ public:
             erase_note(ghost_notes, *rem);
         }
 
-        noteOff(note, velocity);
-        output_pads(pads, color, 0);
+        mt.data[0] = note;
+        aux_out.push(mt);
+        output_pads(pads, color, 0, mt.frame, dev_out);
+    }
+
+    //-------------------------------------------------------------------------------------------------------
+    virtual void
+    initialize(const Graph::properties &properties) override
+    //-------------------------------------------------------------------------------------------------------
+    {
+        m_async_buffer.allocate(properties.vector*sizeof(sample_t));
+    }
+
+    //-------------------------------------------------------------------------------------------------------
+    virtual void
+    rwrite(pool& inputs, pool& outputs, vector_t nframes) override
+    //-------------------------------------------------------------------------------------------------------
+    {
+        auto dev_in = inputs.midi[0][0];
+        auto aux_in = inputs.midi[1][0];
+        auto dev_out = outputs.midi[0][0];
+        auto aux_out = outputs.midi[1][0];
+
+        for (auto& mt : *dev_in)
+        {
+            switch(mt.status & 0xf0)
+            {
+            // note: channel pressure & program change are not expected
+            // to be sent from the device
+            case 0x80: process_note_off(mt, *dev_out, *aux_out);  break;
+            case 0x90: process_note_on(mt, *dev_out, *aux_out); break;
+            case 0xa0:
+            {
+                // aftertouch: lookup note and pass-through to output
+                // might be interesting to have device feedback
+                // but it also might be too much to send back out?
+                mt.data[0] = lookup_note(mt.data[0]-36) + m_octave*12;
+                aux_out->push(mt);
+                break;
+            }
+            case 0xb0:
+            {
+                // control: modwheel, command buttons
+                // and knobs
+
+                switch(mt.data[0])
+                {
+                // modwheel: pass through
+                case 0: aux_out->push(mt); break;
+
+                case Ableton::Push::CommandButtons::OctaveUp:
+                    update_octave(1, mt.frame, *dev_out); break;
+
+                case Ableton::Push::CommandButtons::OctaveDown:
+                    update_octave(-1, mt.frame, *dev_out); break;
+
+                    // knobs TODO
+                }
+
+                break;
+            }
+            case 0xe0:
+                // pass through pitchbend
+                aux_out->push(mt);
+            }
+        }
+
+        // push back asynchronous events if there are any
+        for (auto& mt : m_async_buffer)
+             dev_out->push(mt);
+
+        m_async_buffer.clear();
+    }
+
+    //-------------------------------------------------------------------------------------------------------
+    // OUTPUT SIGNALS
+    //-------------------------------------------------------------------------------------------------------
+
+    Q_SIGNAL void
+    noteOn(unsigned int index, unsigned int velocity);
+
+    Q_SIGNAL void
+    noteOff(unsigned int index, unsigned int velocity);
+
+    Q_SIGNAL void
+    aftertouch(unsigned int index, unsigned int value);
+
+    Q_SIGNAL void
+    padOn(unsigned int index, unsigned int color, unsigned int mode);
+
+    //-------------------------------------------------------------------------------------------------------
+    template<typename T> void
+    erase_note(std::vector<T>& v, T note)
+    {
+        v.erase(std::remove(v.begin(), v.end(), note), v.end());
+    }
+
+    //-------------------------------------------------------------------------------------------------------
+    template<typename T> bool
+    contains_note(std::vector<T>& v, T note)
+    {
+        return std::find(v.begin(), v.end(), note) != v.end();
     }
 };
 
