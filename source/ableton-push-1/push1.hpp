@@ -958,20 +958,20 @@ public:
     lcd_display(unsigned int row, unsigned int column, QString text)
     //-------------------------------------------------------------------------------------------------------
     {
-        QByteArray b_arr;
-        b_arr.append(text.toUtf8());
+        auto b_arr = text.toUtf8();
 
         byte_t rw = 0x18+row;
-        byte_t len = b_arr.count();
-        byte_t col = column;
+        byte_t cl = column;
+        byte_t le = b_arr.count()+1;
 
-        byte_t ssx[7] = { 0x47, 0x7f, 0x15, rw, 0x0, len, col };
-        midi_t* mt = m_async_buffer.reserve(7+len);
+        byte_t ssx[7] = { 0x47, 0x7f, 0x15, rw, 0x0, le, cl };
+        // don't foreget the EOX at the end, we reserve string nbytes+8
+        midi_t* mt = m_async_buffer.reserve(8+le);
 
         mt->status = 0xf0;
         memcpy(mt->data, ssx, 7);
-        memcpy(&(mt->data[7]), b_arr.data(), len);
-        mt->data[7+len] = 0xf7;
+        memcpy(&(mt->data[7]), b_arr.data(), le);
+        mt->data[7+le] = 0xf7;
     }
 };
 
