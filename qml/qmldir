@@ -1,6 +1,4 @@
-module WPN114.Devices
+module WPN114.Audio.Devices
 typeinfo devices.qmltypes
 plugin wpn114devices-qml
 classname qml_plugin
-
-AbletonPush 1.0 PushDevice.qml

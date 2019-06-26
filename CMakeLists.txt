@@ -27,5 +27,4 @@ target_link_libraries(${PROJECT_NAME} Qt5::Core Qt5::Quick Qt5::Qml -L${WPN114AU
 target_include_directories(${PROJECT_NAME} PUBLIC ${WPN114AUDIO_INCLUDE})
 
 install(TARGETS ${PROJECT_NAME} DESTINATION ${WPN114AUDIO_ROOT}/Devices)
-install(FILES qml/devices.qmltypes qml/qmldir qml/PushDevice.qml
-        DESTINATION ${QT5_WPN114QML_PATH}/Devices)
+install(FILES qml/devices.qmltypes qml/qmldir DESTINATION ${WPN114AUDIO_ROOT}/Devices)

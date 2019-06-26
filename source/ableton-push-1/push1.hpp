@@ -396,6 +396,7 @@ public:
         held_notes.reserve(32);
         active_notes.reserve(32);
         ghost_notes.reserve(32);
+        m_name = "PushChromaticModel";
     }
     // default constructor
 
@@ -621,7 +622,7 @@ public:
             midi_t* mt  = dev_out.reserve(2);
             mt->frame   = frame;
             mt->status  = 0x90+mode;
-            mt->data[0] = pvec.pads[n];
+            mt->data[0] = pvec.pads[n]+36;
             mt->data[1] = color;
         }
     }
@@ -706,7 +707,10 @@ public:
     {
         note_t
         n0 = mt.data[0]-36,
-        note = lookup_note(n0) + m_octave*12;
+        note = lookup_note(n0);
+
+        auto pads = lookup_pads(note);
+        note += m_octave*12;
 
         if (contains_note(held_notes, note))
             return;
@@ -715,7 +719,6 @@ public:
         aux_out.push(mt);
         active_notes.push_back(note);
 
-        auto pads = lookup_pads(note);
         output_pads(pads, m_pressed, 0, mt.frame, dev_out);
     }
 
@@ -726,10 +729,12 @@ public:
     {
         note_t
         n0 = mt.data[0]-36,
-        note = lookup_note(n0) + m_octave*12;
+        note = lookup_note(n0);
 
         auto color  = lookup_color(note);
         auto pads   = lookup_pads(note);
+
+        note += m_octave*12;
 
         // if note is already registered as
         // a 'held note', erase it
@@ -796,8 +801,14 @@ public:
             {
             // note: channel pressure & program change are not expected
             // to be sent from the device
-            case 0x80: process_note_off(mt, *dev_out, *aux_out);  break;
-            case 0x90: process_note_on(mt, *dev_out, *aux_out); break;
+            case 0x80:
+                process_note_off(mt, *dev_out, *aux_out);
+                break;
+
+            case 0x90:
+                process_note_on(mt, *dev_out, *aux_out);
+                break;
+
             case 0xa0:
             {
                 // aftertouch: lookup note and pass-through to output
@@ -809,19 +820,21 @@ public:
             }
             case 0xb0:
             {
-                // control: modwheel, command buttons
-                // and knobs
-
+                // control: modwheel, command buttons, toggles, knobs
                 switch(mt.data[0])
                 {
                 // modwheel: pass through
-                case 0: aux_out->push(mt); break;
+                case 0:
+                    aux_out->push(mt);
+                    break;
 
                 case Ableton::Push::CommandButtons::OctaveUp:
-                    update_octave(1, mt.frame, *dev_out); break;
+                    update_octave(1, mt.frame, *dev_out);
+                    break;
 
                 case Ableton::Push::CommandButtons::OctaveDown:
-                    update_octave(-1, mt.frame, *dev_out); break;
+                    update_octave(-1, mt.frame, *dev_out);
+                    break;
 
                     // knobs TODO
                 }
