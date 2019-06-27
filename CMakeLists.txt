@@ -16,13 +16,15 @@ set(WPN114DEVICES_QML_SOURCES
     )
 
 if (UNIX AND NOT APPLE)
-    set(QT5_WPN114QML_PATH /usr/lib/qt/qml/WPN114)
+    set(WPN114_ROOT /usr/lib/qt/qml/WPN114)
+    set(WPN114AUDIO_ROOT ${WPN114_ROOT}/Audio)
+    set(WPN114AUDIO_INCLUDE ${WPN114AUDIO_ROOT}/include)
 endif()
 
 
 add_library(${PROJECT_NAME} SHARED ${WPN114DEVICES_QML_SOURCES})
-target_link_libraries(${PROJECT_NAME} Qt5::Core Qt5::Quick Qt5::Qml)
+target_link_libraries(${PROJECT_NAME} Qt5::Core Qt5::Quick Qt5::Qml -L${WPN114AUDIO_ROOT} -lwpn114audio-qml)
+target_include_directories(${PROJECT_NAME} PUBLIC ${WPN114AUDIO_INCLUDE})
 
-install(TARGETS ${PROJECT_NAME} DESTINATION ${QT5_WPN114QML_PATH}/Devices)
-install(FILES qml/devices.qmltypes qml/qmldir qml/PushDevice.qml
-        DESTINATION ${QT5_WPN114QML_PATH}/Devices)
+install(TARGETS ${PROJECT_NAME} DESTINATION ${WPN114AUDIO_ROOT}/Devices)
+install(FILES qml/devices.qmltypes qml/qmldir DESTINATION ${WPN114AUDIO_ROOT}/Devices)

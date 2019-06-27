@@ -1,141 +1,197 @@
 import QtQuick 2.0
-import WPN114.Midi 1.0 as WPN114
-import WPN114.Devices 1.0 as Push
+import WPN114.Audio 1.1 as WPN114
+import WPN114.Devices 1.1
 
-Item
-{
+WPN114.MIDIGateway
+{    
     id: root
-    property alias midi_device: midi_hdl
 
-    signal play         ();
-    signal record       ();
-    signal octaveDown   ();
-    signal octaveUp     ();
-    signal session      ();
-    signal track        ();
-    signal padOn        ( int index, int velocity);
-    signal padOff       ( int index, int velocity);
-    signal leftArrow    ();
-    signal rightArrow   ();
-    signal select       ( bool value );
-    signal shift        ( bool value );
-    signal knob         ( int index, int value );
-    signal upToggle     ( int index, int value );
-    signal downToggle   ( int index, int value );
-    signal modwheel     ( int value );
-    signal bend         ( int value );
-    signal aftertouch   ( int index, int value );
-    signal pressure     ( int value );
+    property alias in_channel: input.channels
+    property alias out_channel: output.channels
 
-    function lightButton (index, mode) {
-        midi_hdl.control(0, index, mode);
-    }
+    midi_in.assign: WPN114.Input { id: input; type: WPN114.Input.Midi }
+    midi_out.assign: WPN114.Output { id: output; type: WPN114.Input.Midi }
 
-    function lightPad(index, color, mode) {
-        midi_hdl.noteOn(mode, index+36, color );
-    }
+    //---------------------------------------------------------------------------------------------
+    signal
+    play();
 
-    function lightToggle(row, index, mode) {
-        midi_hdl.control(0, row+index, mode );
-    }
+    //---------------------------------------------------------------------------------------------
+    signal
+    record();
 
-    function lcdDisplay(row, column, str) {
-        var sysx = [240, 71, 127, 21, 24+row, 0, str.length+1, column, str, 247];
-        midi_hdl.sendVariant(sysx);
-    }
+    //---------------------------------------------------------------------------------------------
+    signal
+    octaveDown();
 
-    function lcdClearline(index) {
-        var sysx = [240, 71, 127, 21, 28+index, 0, 0, 247];
-        midi_hdl.sendVariant(sysx);
-    }
+    //---------------------------------------------------------------------------------------------
+    signal
+    octaveUp();
 
-    function lcdClearAll() {
-        for (var i = 0; i < 4; ++ i)
-            lcdClearline(i);
-    }
+    //---------------------------------------------------------------------------------------------
+    signal
+    session();
 
-    function padGridClear() {
-        for (var i = 36; i < 100; ++i)
-            midi_hdl.noteOn(0, i, 0);
-    }
+    //---------------------------------------------------------------------------------------------
+    signal
+    track();
 
-    function pitchbendTouch() {
-        var sysx = [240, 71, 127, 21, 99, 0, 1, 5, 247];
-        midi_hdl.sendVariant(sysx);
-    }
+    //---------------------------------------------------------------------------------------------
+    signal
+    padOn(int index, int velocity);
 
-    function modwheelTouch() {
-        var sysx = [240, 71, 127, 21, 99, 0, 1, 9, 247];
-        midi_hdl.sendVariant(sysx);
-    }
+    //---------------------------------------------------------------------------------------------
+    signal
+    padOff(int index, int velocity);
 
-    WPN114.MidiDevice //----------------------------------------------------------------- PUSH_DEVICE
+    //---------------------------------------------------------------------------------------------
+    signal
+    leftArrow();
+
+    //---------------------------------------------------------------------------------------------
+    signal
+    rightArrow();
+
+    //---------------------------------------------------------------------------------------------
+    signal
+    select(bool value);
+
+    //---------------------------------------------------------------------------------------------
+    signal
+    shift(bool value);
+
+    //---------------------------------------------------------------------------------------------
+    signal
+    knob(int index, int value);
+
+    //---------------------------------------------------------------------------------------------
+    signal
+    upToggle(int index, int value);
+
+    //---------------------------------------------------------------------------------------------
+    signal
+    downToggle(int index, int value);
+
+    //---------------------------------------------------------------------------------------------
+    signal
+    modwheel(int value);
+
+    //---------------------------------------------------------------------------------------------
+    function
+    light_button(index, mode) { write_control(0, index, mode); }
+
+    //---------------------------------------------------------------------------------------------
+    function
+    light_pad(index, color, mode) { write_note_on(mode, index+36, color); }
+
+    //---------------------------------------------------------------------------------------------
+    function
+    light_toggle(row, index, mode) { write_control(0, row+index, mode); }
+
+    //---------------------------------------------------------------------------------------------
+    function
+    lcd_display(row, column, str)
+    //---------------------------------------------------------------------------------------------
     {
-        id:         midi_hdl
+        var ssx = [240, 71, 127, 21, 24+row, 0, str.length+1, column, str, 247];
+        write_sysex(ssx);
+    }
 
-        inDevice:   "Ableton Push:Ableton Push MIDI 2 20:1"
-        outDevice:  "Ableton Push:Ableton Push MIDI 2 20:1"
+    //---------------------------------------------------------------------------------------------
+    function
+    lcd_clear_line(index)
+    //---------------------------------------------------------------------------------------------
+    {
+        var ssx = [240, 71, 127, 21, 28+index, 0, 0, 247];
+        write_sysex(ssx);
+    }
 
-        Component.onCompleted:
-        {
-            console.log("MIDI In Devices:", midi_hdl.inDevices())
-            console.log("MIDI Out Devices:", midi_hdl.outDevices())
-        }
+    //---------------------------------------------------------------------------------------------
+    function
+    lcd_clear()
+    //---------------------------------------------------------------------------------------------
+    {
+        for (var i = 0; i < 4; ++i)
+            lcd_clear_line(i);
+    }
 
-        onControlReceived:
-        {
-            if (index >= 71 && index <= 79)
-                root.knob(index-71, value);
+    //---------------------------------------------------------------------------------------------
+    function
+    set_touch_bend()
+    //---------------------------------------------------------------------------------------------
+    {
+        var ssx = [240, 71, 127, 21, 99, 0, 1, 5, 247];
+        write_sysex(ssx);
+    }
 
-            else if (index == 0)
-                root.modwheel(value);
+    //---------------------------------------------------------------------------------------------
+    function
+    set_touch_modwheel()
+    //---------------------------------------------------------------------------------------------
+    {
+        var ssx = [240, 71, 127, 21, 99, 0, 1, 9, 247];
+        write_sysex(ssx);
+    }
 
-            else if (index >= 20 && index <= 27)
-                root.upToggle(index-20, value);
+    //---------------------------------------------------------------------------------------------
+    onControl:
+    //---------------------------------------------------------------------------------------------
+    {        
+        console.log("control", index, value);
 
-            else if (index >= 102 && index <= 109)
-                root.downToggle(index-102, value);
+        if (index >= 71 && index <= 79)
+            root.knob(index-71, value);
 
-            else if (index === Push.CommandButtons.Select)
-                root.select(value);
+        else if (index == 0)
+            root.modwheel(value);
 
-            else if (index === Push.CommandButtons.Shift)
-                root.shift(value);
+        else if (index >= 20 && index <= 27)
+            root.upToggle(index-20, value);
 
-            else if (index === Push.CommandButtons.LeftArrow && value)
-                root.leftArrow();
+        else if (index >= 102 && index <= 109)
+            root.downToggle(index-102, value);
 
-            else if (index === Push.CommandButtons.RightArrow && value)
-                root.rightArrow();
+        else if (index === CommandButtons.Select)
+            root.select(value);
 
-            else if (index === Push.CommandButtons.OctaveDown && value)
-                root.octaveDown();
+        else if (index === CommandButtons.Shift)
+            root.shift(value);
 
-            else if (index === Push.CommandButtons.OctaveUp && value)
-                root.octaveUp();
+        else if (index === CommandButtons.LeftArrow && value)
+            root.leftArrow();
 
-            else if (index === Push.CommandButtons.Session && value)
-                root.session();
+        else if (index === CommandButtons.RightArrow && value)
+            root.rightArrow();
 
-            else if (index === Push.CommandButtons.Note && value)
-                root.track();
+        else if (index === CommandButtons.OctaveDown && value)
+            root.octaveDown();
 
-            else if (index === Push.CommandButtons.Play && value)
-                root.play();
-        }
+        else if (index === CommandButtons.OctaveUp && value)
+            root.octaveUp();
 
-        onNoteOnReceived: {
-            if (index > 35 && index < 100)
-                root.padOn(index-36, velocity);
-        }
+        else if (index === CommandButtons.Session && value)
+            root.session();
 
-        onNoteOffReceived: {
-            if (index > 35 && index < 100)
-                root.padOff(index-36, velocity);
-        }
+        else if (index === CommandButtons.Note && value)
+            root.track();
 
-        onPitchBendReceived:            root.bend(value);
-        onAftertouchReceived:           root.aftertouch(index-36, value);
-        onChannelPressureReceived:      root.pressure(value);
+        else if (index === CommandButtons.Play && value)
+            root.play();
+    }
+
+    //---------------------------------------------------------------------------------------------
+    onNoteOn:
+    //---------------------------------------------------------------------------------------------
+    {
+        if (index > 35 && index < 100)
+            root.padOn(index-36, velocity);
+    }
+
+    //---------------------------------------------------------------------------------------------
+    onNoteOff:
+    //---------------------------------------------------------------------------------------------
+    {
+        if (index > 35 && index < 100)
+            root.padOff(index-36, velocity);
     }
 }
