@@ -700,6 +700,11 @@ public:
         if (contains_note(held_notes, note))
             return;
 
+        if (contains_note(active_notes, note))
+            // this may happen because of mirror pads, retrigger
+            aux_out.reserve(0x80, mt.frame, note, mt.data[1]);
+
+
         mt.data[0] = note;
         aux_out.push(mt);
         active_notes.push_back(note);
@@ -756,7 +761,11 @@ public:
                 }
             }
 
-            assert(rem);
+            // this may happen during note retrigger, because of mirror pads
+            // just return
+            if (rem == nullptr)
+                return;
+
             erase_note(ghost_notes, *rem);
         }
 
