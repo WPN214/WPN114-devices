@@ -509,14 +509,8 @@ public:
     // this is asynchronous
     //-------------------------------------------------------------------------------------------------------
     {
-        for (auto& pad : grid)
-        {
-            midi_t* mt  = m_async_buffer.reserve(2);
-            mt->frame   = 0;
-            mt->status  = 0x90;
-            mt->data[0] = pad[padno]+36;
-            mt->data[1] = pad[colorno];
-        }
+        for (auto& pad : grid)            
+            m_async_buffer.reserve(0x90, 0, pad[padno]+36, pad[colorno]);
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -527,13 +521,7 @@ public:
     //-------------------------------------------------------------------------------------------------------
     {
         for (auto& pad : grid)
-        {
-            midi_t* mt  = m_async_buffer.reserve(2);
-            mt->frame   = 0;
-            mt->status  = 0x90;
-            mt->data[0] = pad[padno]+36;
-            mt->data[1] = 0;
-        }
+            m_async_buffer.reserve(0x90, 0, pad[padno]+36, (byte_t)0);
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -618,13 +606,7 @@ public:
     //-------------------------------------------------------------------------------------------------------
     {
         for (byte_t n = 0; n < pvec.npads; ++n)
-        {
-            midi_t* mt  = dev_out.reserve(2);
-            mt->frame   = frame;
-            mt->status  = 0x90+mode;
-            mt->data[0] = pvec.pads[n]+36;
-            mt->data[1] = color;
-        }
+            dev_out.reserve(0x90+mode, frame, pvec.pads[n]+36, color);
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -816,8 +798,13 @@ public:
                 // aftertouch: lookup note and pass-through to output
                 // might be interesting to have device feedback
                 // but it also might be too much to send back out?
-                mt.data[0] = lookup_note(mt.data[0]-36) + m_octave*12;
-                aux_out->push(mt);
+                if(mt.data[1] >= 60) {
+                    byte_t value = ((mt.data[1]-60)/67)*127;
+                    mt.data[0] = lookup_note(mt.data[0]-36) + m_octave*12;
+                    mt.data[1] = value;
+                    aux_out->push(mt);
+                }
+
                 break;
             }
             case 0xb0:
