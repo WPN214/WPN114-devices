@@ -525,7 +525,7 @@ public:
     // light off device'selected grid pads
     // this is asynchronous
     //-------------------------------------------------------------------------------------------------------
-    {        
+    {
         for (auto& pad : grid)
         {
             midi_t* mt  = m_async_buffer.reserve(2);
@@ -649,16 +649,16 @@ public:
             return;
 
         for (auto& ghost : ghost_notes)
-            update_note(ghost.index, m_octave, delta, 0, frame, dev_out);
+            update_note(ghost.index, delta, 0, frame, dev_out);
 
         for (auto& held : held_notes)
-            update_note(held, m_octave, delta, PadLightingMode::Pulse2, frame, dev_out);
+            update_note(held, delta, PadLightingMode::Pulse2, frame, dev_out);
 
         for (auto& active : active_notes) {
             // all active notes become 'ghost notes'
             ghost_note ghost = { active, m_octave };
             ghost_notes.push_back(ghost);
-            update_note(active, m_octave, delta, 0, frame, dev_out);
+            update_note(active, delta, 0, frame, dev_out);
         }
 
         active_notes.clear();
@@ -667,13 +667,13 @@ public:
 
     //-------------------------------------------------------------------------------------------------------
     void
-    update_note(note_t note, byte_t oct, int8_t oct_d,
+    update_note(note_t note, int8_t oct_d,
                 uint8_t mode, vector_t frame,
                 midibuffer& dev_out)
     // this is used when octave has changed
     //-------------------------------------------------------------------------------------------------------
     {
-        int8_t n0 = note-oct*12;
+        int8_t n0 = note-m_octave*12;
 
         // these are the min/max n0 values
         // contained in the current grid
@@ -731,7 +731,7 @@ public:
         n0 = mt.data[0]-36,
         note = lookup_note(n0);
 
-        auto color  = lookup_color(note);
+        auto color  = lookup_color(n0);
         auto pads   = lookup_pads(note);
 
         note += m_octave*12;
@@ -748,11 +748,10 @@ public:
 
         if (contains_note(active_notes, note))
             erase_note(active_notes, note);
-
         else
-        // if note is not registered as active, it should be a 'ghost' note
-        // meaning a note for which the pad indexes have changed during octave change
         {
+            // if note is not registered as active, it should be a 'ghost' note
+            // meaning a note for which the pad indexes have changed during octave change
             auto n1 = lookup_note(n0);
             ghost_note* rem = nullptr;
 
@@ -790,10 +789,10 @@ public:
     rwrite(pool& inputs, pool& outputs, vector_t nframes) override
     //-------------------------------------------------------------------------------------------------------
     {
-        auto dev_in = inputs.midi[0][0];
-        auto aux_in = inputs.midi[1][0];
-        auto dev_out = outputs.midi[0][0];
-        auto aux_out = outputs.midi[1][0];
+        auto dev_in     = inputs.midi[0][0];
+        auto aux_in     = inputs.midi[1][0];
+        auto dev_out    = outputs.midi[0][0];
+        auto aux_out    = outputs.midi[1][0];
 
         for (auto& mt : *dev_in)
         {
@@ -802,11 +801,14 @@ public:
             // note: channel pressure & program change are not expected
             // to be sent from the device
             case 0x80:
-                process_note_off(mt, *dev_out, *aux_out);
+                if (mt.data[0] > 35)
+                    // otherwise they are emitted by the knob/ribbon sensors
+                    process_note_off(mt, *dev_out, *aux_out);
                 break;
 
             case 0x90:
-                process_note_on(mt, *dev_out, *aux_out);
+                if (mt.data[0] > 35)
+                    process_note_on(mt, *dev_out, *aux_out);
                 break;
 
             case 0xa0:
@@ -829,11 +831,14 @@ public:
                     break;
 
                 case Ableton::Push::CommandButtons::OctaveUp:
-                    update_octave(1, mt.frame, *dev_out);
+                    // update on button release
+                    if (mt.data[1] == 0)
+                        update_octave(1, mt.frame, *dev_out);
                     break;
 
                 case Ableton::Push::CommandButtons::OctaveDown:
-                    update_octave(-1, mt.frame, *dev_out);
+                    if (mt.data[1] == 0)
+                        update_octave(-1, mt.frame, *dev_out);
                     break;
 
                     // knobs TODO
@@ -868,7 +873,22 @@ public:
     aftertouch(unsigned int index, unsigned int value);
 
     Q_SIGNAL void
-    padOn(unsigned int index, unsigned int color, unsigned int mode);
+    pitchbend(unsigned int value);
+
+    Q_SIGNAL void
+    modwheel(unsigned int value);
+
+    Q_SIGNAL void
+    pad(unsigned int index, unsigned int color, unsigned int mode);
+
+    Q_SIGNAL void
+    command(unsigned int index, unsigned int value);
+
+    Q_SIGNAL void
+    toggle(unsigned int row, unsigned int index, unsigned int value);
+
+    Q_SIGNAL void
+    knob(unsigned int index, unsigned int value);
 
     //-------------------------------------------------------------------------------------------------------
     template<typename T> void

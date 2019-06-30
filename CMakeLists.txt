@@ -11,7 +11,6 @@ find_package(Qt5 REQUIRED COMPONENTS Quick Core Qml)
 set(WPN114DEVICES_QML_SOURCES
     qml_plugin.cpp
     source/ableton-push-1/push1.hpp
-    source/ableton-push-1/push1.cpp
     qml/PushDevice.qml
     )
 
