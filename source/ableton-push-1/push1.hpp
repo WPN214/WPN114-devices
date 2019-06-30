@@ -346,6 +346,9 @@ class ChromaticModel : public Node
     m_visible   = false,
     m_complete  = false;
 
+    std::atomic<bool>
+    m_accent{false};
+
     //-------------------------------------------------------------------------------------------------------
     std::vector<padnote_t>
     grid;
@@ -701,6 +704,10 @@ public:
         aux_out.push(mt);
         active_notes.push_back(note);
 
+        QMetaObject::invokeMethod(this, "noteOn", Qt::QueuedConnection,
+                                  Q_ARG(unsigned int, note),
+                                  Q_ARG(unsigned int, mt.data[1]));
+
         output_pads(pads, m_pressed, 0, mt.frame, dev_out);
     }
 
@@ -756,6 +763,10 @@ public:
         mt.data[0] = note;
         aux_out.push(mt);
         output_pads(pads, color, 0, mt.frame, dev_out);
+
+        QMetaObject::invokeMethod(this, "noteOff", Qt::QueuedConnection,
+                                  Q_ARG(unsigned int, note),
+                                  Q_ARG(unsigned int, mt.data[1]));
     }
 
     //-------------------------------------------------------------------------------------------------------
@@ -789,16 +800,21 @@ public:
                 break;
 
             case 0x90:
-                if (mt.data[0] > 35)
+            {
+                if (mt.data[0] > 35) {
+                    if (m_accent.load())
+                        mt.data[1] = 127;
                     process_note_on(mt, *dev_out, *aux_out);
+                }
                 break;
-
+            }
             case 0xa0:
             {
                 // aftertouch: lookup note and pass-through to output
                 // might be interesting to have device feedback
                 // but it also might be too much to send back out?
                 if(mt.data[1] >= 60) {
+                    // TODO: make async parameter for this
                     byte_t value = ((mt.data[1]-60)/67)*127;
                     mt.data[0] = lookup_note(mt.data[0]-36) + m_octave*12;
                     mt.data[1] = value;
@@ -817,13 +833,29 @@ public:
                     aux_out->push(mt);
                     break;
 
-                case Ableton::Push::CommandButtons::OctaveUp:
+                case CommandButtons::Accent:
+                {
+                    if (mt.data[1] == 0)
+                    {
+                        m_accent.store(!m_accent.load());
+                        ButtonLightingMode::Values mode;
+
+                        if (m_accent.load())
+                             mode = ButtonLightingMode::FullBlinkSlow;
+                        else mode = ButtonLightingMode::Dim;
+                        dev_out->reserve(mt.status, mt.frame, mt.data[0], mode);
+                    }
+
+                    break;
+                }
+
+                case CommandButtons::OctaveUp:
                     // update on button release
                     if (mt.data[1] == 0)
                         update_octave(1, mt.frame, *dev_out);
                     break;
 
-                case Ableton::Push::CommandButtons::OctaveDown:
+                case CommandButtons::OctaveDown:
                     if (mt.data[1] == 0)
                         update_octave(-1, mt.frame, *dev_out);
                     break;
