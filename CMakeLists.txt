@@ -20,7 +20,7 @@ if (UNIX AND NOT APPLE)
     set(WPN114AUDIO_INCLUDE ${WPN114AUDIO_ROOT}/include)
 endif()
 
-
+add_subdirectory(examples)
 add_library(${PROJECT_NAME} SHARED ${WPN114DEVICES_QML_SOURCES})
 target_link_libraries(${PROJECT_NAME} Qt5::Core Qt5::Quick Qt5::Qml -L${WPN114AUDIO_ROOT} -lwpn114audio-qml)
 target_include_directories(${PROJECT_NAME} PUBLIC ${WPN114AUDIO_INCLUDE})
