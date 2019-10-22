@@ -50,7 +50,7 @@ Window
                     name: "push_in"
                     type: WPN114.Input.Midi
                     channels: 0
-                    connections: ["Ableton Push", 1]
+//                    connections: ["Ableton Push", 1]
                     WPN114.VelocityMap { }
                 }
 
@@ -59,7 +59,7 @@ Window
                     name: "dev_out";
                     type: WPN114.Output.Midi;
                     channels: 0
-                    connections: ["Ableton Push", 1]
+//                    connections: ["Ableton Push", 1]
                 }
 
             aux_out.assign:
@@ -67,7 +67,7 @@ Window
                     name: "aux_out";
                     type: WPN114.Output.Midi;
                     channels: 1
-                    connections: "REAPER"
+//                    connections: "REAPER"
                 }
         }
     }
